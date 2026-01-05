@@ -1,0 +1,6 @@
+; Certification setup for chat-lib.lisp
+; Requires ttags for quicklisp/dexador (via llm-client and mcp-client)
+
+(in-package "ACL2")
+
+; cert-flags: ? t :ttags :all

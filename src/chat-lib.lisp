@@ -1,0 +1,261 @@
+; Chat Library - Common definitions for interactive chat
+; =====================================================
+; This file provides the core functions for running a ReAct agent
+; with LLM and code execution support. Include this book, then use
+; (chat "your message") for simple interaction.
+;
+; Usage:
+;   (include-book "chat-lib" :ttags ...)
+;   (chat "Hello, can you help me with ACL2?")
+
+(in-package "ACL2")
+
+;;;============================================================================
+;;; Dependencies
+;;;============================================================================
+
+(include-book "verified-agent")
+(include-book "llm-client"
+              :ttags ((:quicklisp) (:quicklisp.osicat) (:quicklisp.dexador) (:http-json) (:llm-client)))
+(include-book "mcp-client"
+              :ttags ((:quicklisp) (:quicklisp.dexador) (:http-json) (:mcp-client)))
+
+;;;============================================================================
+;;; Configuration Constants
+;;;============================================================================
+
+;; Model preferences in order - first match wins
+(defconst *model-prefs* '("qwen" "nemotron" "llama" "gemma"))
+
+;; Default system prompt for the ReAct agent
+(defconst *default-system-prompt*
+  "You are a helpful AI assistant running inside a formally verified ReAct agent framework built in ACL2.
+
+You have access to ACL2 code execution. To run ACL2 code, put it in a fenced code block:
+
+```acl2
+(+ 1 2 3)
+```
+
+or:
+
+```lisp
+(defun factorial (n) (if (zp n) 1 (* n (factorial (1- n)))))
+```
+
+I will execute the code and show you the result. You can then continue reasoning or give a final answer.
+
+Be concise. Show your reasoning.")
+
+;; Default agent configuration
+(defconst *default-agent-config*
+  (make-agent-state 
+    :max-steps 20              ; Allow up to 20 conversation turns
+    :token-budget 50000        ; Token budget for tool calls
+    :time-budget 3600          ; 1 hour time budget
+    :file-access 1             ; Read access to files
+    :execute-allowed t         ; Code execution enabled
+    :max-context-tokens 8000   ; Context window size
+    :satisfaction 0))          ; Starting satisfaction
+
+;;;============================================================================
+;;; Display Helpers
+;;;============================================================================
+
+(defun show-messages (msgs)
+  "Display a list of chat messages."
+  (declare (xargs :mode :program))
+  (if (endp msgs)
+      nil
+    (let* ((msg (car msgs))
+           (role (chat-message->role msg))
+           (content (chat-message->content msg))
+           (role-str (chat-role-case role
+                       :system "SYSTEM"
+                       :user "USER"
+                       :assistant "ASSISTANT"
+                       :tool "TOOL")))
+      (prog2$ (cw "~%[~s0]~%~s1~%" role-str content)
+              (show-messages (cdr msgs))))))
+
+(defun show-conversation (st)
+  "Display the full conversation from an agent state."
+  (declare (xargs :mode :program))
+  (prog2$ (cw "~%========== Conversation ==========")
+          (prog2$ (show-messages (get-messages st))
+                  (cw "~%===================================~%"))))
+
+(defun show-context-usage (st)
+  "Display context token usage statistics."
+  (declare (xargs :mode :program))
+  (let* ((msgs (get-messages st))
+         (char-len (messages-char-length msgs))
+         (token-est (messages-token-estimate msgs))
+         (max-tokens (agent-state->max-context-tokens st)))
+    (prog2$ (cw "~%Context Usage:~%")
+      (prog2$ (cw "  Total characters: ~x0~%" char-len)
+        (prog2$ (cw "  Estimated tokens: ~x0~%" token-est)
+          (prog2$ (cw "  Max tokens: ~x0~%" max-tokens)
+            (cw "  Fits in context: ~x0~%" 
+                (messages-fit-p msgs max-tokens))))))))
+
+;;;============================================================================
+;;; Code Execution Support
+;;;============================================================================
+
+;; Strip leading whitespace from character list
+(defun strip-leading-ws (lst)
+  (declare (xargs :mode :program))
+  (if (endp lst) nil
+    (if (member (car lst) '(#\Space #\Tab #\Newline #\Return))
+        (strip-leading-ws (cdr lst))
+      lst)))
+
+;; Trim whitespace from string
+(defun my-string-trim (str)
+  (declare (xargs :mode :program))
+  (let* ((chars (coerce str 'list))
+         (trimmed (strip-leading-ws chars))
+         (rev-trimmed (strip-leading-ws (reverse trimmed))))
+    (coerce (reverse rev-trimmed) 'string)))
+
+;; Extract first ```acl2 or ```lisp code block from text
+(defun extract-code-block (response)
+  "Extract the first ACL2/Lisp code block from a response string."
+  (declare (xargs :mode :program))
+  (let* ((acl2-start (search "```acl2" response))
+         (lisp-start (search "```lisp" response))
+         (start-marker (cond ((and acl2-start lisp-start)
+                              (if (< acl2-start lisp-start) "```acl2" "```lisp"))
+                             (acl2-start "```acl2")
+                             (lisp-start "```lisp")
+                             (t nil)))
+         (start-pos (cond ((and acl2-start lisp-start)
+                           (min acl2-start lisp-start))
+                          (acl2-start acl2-start)
+                          (lisp-start lisp-start)
+                          (t nil))))
+    (if (not start-pos)
+        (mv nil "")
+      (let* ((content-start (+ start-pos (length start-marker)))
+             (newline-pos (search (coerce '(#\Newline) 'string)
+                                  (subseq response content-start (length response))))
+             (code-start (if newline-pos (+ content-start newline-pos 1) content-start))
+             (rest (subseq response code-start (length response)))
+             (end-pos (search "```" rest)))
+        (if (not end-pos)
+            (mv nil "")
+          (mv t (my-string-trim (subseq rest 0 end-pos))))))))
+
+;; Execute ACL2 code via MCP
+(defun execute-acl2-code (code mcp-conn state)
+  "Execute ACL2 code via MCP connection."
+  (declare (xargs :mode :program :stobjs state))
+  (if (not (mcp-connection-p mcp-conn))
+      (mv "No MCP connection" "" state)
+    (mcp-acl2-execute mcp-conn code state)))
+
+;;;============================================================================
+;;; ReAct Loop Implementation
+;;;============================================================================
+
+(defun react-loop (agent-st model-id mcp-conn max-steps state)
+  "Execute ReAct loop: LLM -> extract code -> execute -> repeat until no code block"
+  (declare (xargs :mode :program :stobjs state))
+  (if (zp max-steps)
+      (prog2$ (cw "~%[Max steps reached]~%")
+              (mv agent-st state))
+    (mv-let (err response state)
+      (llm-chat-completion model-id (get-messages agent-st) state)
+      (if err
+          (prog2$ (cw "~%LLM Error: ~s0~%" err)
+                  (mv agent-st state))
+        (let ((agent-st (add-assistant-msg response agent-st)))
+          (prog2$ (cw "~%Assistant: ~s0~%" response)
+            (mv-let (found? code)
+              (extract-code-block response)
+              (if (not found?)
+                  ;; No code block - done with this turn
+                  (mv agent-st state)
+                ;; Execute code and continue
+                (prog2$ (cw "~%[Executing: ~s0]~%" code)
+                  (mv-let (exec-err result state)
+                    (execute-acl2-code code mcp-conn state)
+                    (let* ((tool-result (if exec-err
+                                            (concatenate 'string "Error: " exec-err)
+                                          result))
+                           ;; Truncate long results for display
+                           (display-result (if (> (length tool-result) 300)
+                                               (concatenate 'string 
+                                                 (subseq tool-result 0 300) "...")
+                                             tool-result))
+                           (agent-st (add-tool-result tool-result agent-st)))
+                      (prog2$ (cw "~%Result: ~s0~%" display-result)
+                        ;; Continue ReAct loop
+                        (react-loop agent-st model-id mcp-conn (1- max-steps) state)))))))))))))
+
+(defun chat-turn (user-msg agent-st model-id mcp-conn state)
+  "Execute one chat turn with ReAct: add user message, run ReAct loop"
+  (declare (xargs :mode :program :stobjs state))
+  (let ((st-with-user (add-user-msg user-msg agent-st)))
+    (react-loop st-with-user model-id mcp-conn 5 state)))
+
+;;;============================================================================
+;;; Input Reading
+;;;============================================================================
+
+(defun read-line-chars (acc state)
+  "Accumulate characters until newline or EOF."
+  (declare (xargs :mode :program :stobjs state))
+  (mv-let (char state)
+    (read-char$ *standard-ci* state)
+    (cond ((null char)  ; EOF
+           (mv (if (null acc) nil (coerce (reverse acc) 'string)) state))
+          ((eql char #\Newline)
+           (mv (coerce (reverse acc) 'string) state))
+          (t (read-line-chars (cons char acc) state)))))
+
+(defun read-line-from-user (state)
+  "Read a line from standard input, return (mv line state)."
+  (declare (xargs :mode :program :stobjs state))
+  (read-line-chars nil state))
+
+;;;============================================================================
+;;; Interactive Chat Loop
+;;;============================================================================
+
+(defun interactive-chat-loop-aux (agent-st model-id mcp-conn state)
+  "Helper for interactive chat loop with code execution."
+  (declare (xargs :mode :program :stobjs state))
+  (prog2$ (cw "~%You: ")
+    (mv-let (input state)
+      (read-line-from-user state)
+      (if (or (null input)
+              (equal input "/exit")
+              (equal input "/quit"))
+          (prog2$ (cw "~%Goodbye!~%")
+                  (mv agent-st state))
+        (mv-let (new-agent state)
+          (chat-turn input agent-st model-id mcp-conn state)
+          (interactive-chat-loop-aux new-agent model-id mcp-conn state))))))
+
+(defun interactive-chat-loop (agent-st model-id state)
+  "Run an interactive ReAct chat loop with code execution. Type /exit to quit."
+  (declare (xargs :mode :program :stobjs state))
+  (prog2$ (cw "~%========================================~%")
+    (prog2$ (cw "Interactive ReAct Chat with Code Execution~%")
+      (prog2$ (cw "(type /exit to quit)~%")
+        (prog2$ (cw "========================================~%")
+          (prog2$ (cw "~%Connecting to MCP server...~%")
+            (mv-let (mcp-err mcp-conn state)
+              (mcp-connect *mcp-default-endpoint* state)
+              (if mcp-err
+                  (prog2$ (cw "MCP connection failed: ~s0~%" mcp-err)
+                    (prog2$ (cw "Code execution disabled.~%")
+                      (interactive-chat-loop-aux agent-st model-id nil state)))
+                (prog2$ (cw "MCP connected.~%")
+                  (prog2$ (if (mcp-connection-has-acl2-session-p mcp-conn)
+                              (cw "ACL2 session: ~s0~%" 
+                                  (mcp-connection->acl2-session-id mcp-conn))
+                            (cw "Warning: No persistent ACL2 session (slower mode).~%"))
+                    (interactive-chat-loop-aux agent-st model-id mcp-conn state)))))))))))
