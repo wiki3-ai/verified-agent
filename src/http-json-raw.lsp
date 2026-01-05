@@ -38,7 +38,8 @@
                           :content json-body
                           :headers headers
                           :connect-timeout connect-timeout
-                          :read-timeout read-timeout)
+                          :read-timeout read-timeout
+                          :force-string t)  ; Force UTF-8 string decoding
               (declare (ignore response-headers uri stream))
               ;; Return success: nil error, body, status, state
               (mv nil (if (stringp body) body "") status state))
@@ -66,7 +67,8 @@
               (dex:get url 
                        :headers headers
                        :connect-timeout connect-timeout
-                       :read-timeout read-timeout)
+                       :read-timeout read-timeout
+                       :force-string t)  ; Force UTF-8 string decoding
             (declare (ignore response-headers uri stream))
             ;; Return success: nil error, body, status, state
             (mv nil (if (stringp body) body "") status state))
@@ -98,7 +100,8 @@
                           :content json-body
                           :headers headers
                           :connect-timeout connect-timeout
-                          :read-timeout read-timeout)
+                          :read-timeout read-timeout
+                          :force-string t)  ; Force UTF-8 string decoding
               (declare (ignore uri stream))
               ;; Convert response-headers hash-table to alist
               (let ((headers-alist 

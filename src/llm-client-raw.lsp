@@ -22,10 +22,12 @@
 ;; JSON String Escaping
 ;;
 ;; Escape special characters in strings for JSON encoding.
+;; Handles full Unicode - non-ASCII chars are passed through as UTF-8.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun json-escape-string (s)
-  "Escape special characters in string S for JSON encoding."
+  "Escape special characters in string S for JSON encoding.
+   Handles Unicode characters properly - they pass through as UTF-8."
   (with-output-to-string (out)
     (loop for c across s do
       (case c
@@ -35,10 +37,13 @@
         (#\Return (write-string "\\r" out))
         (#\Tab (write-string "\\t" out))
         (otherwise 
-         (if (< (char-code c) 32)
-             ;; Control characters as \uXXXX
-             (format out "\\u~4,'0X" (char-code c))
-             (write-char c out)))))))
+         (let ((code (char-code c)))
+           (cond
+             ;; Control characters (0-31) as \uXXXX
+             ((< code 32)
+              (format out "\\u~4,'0X" code))
+             ;; Normal ASCII and Unicode pass through
+             (t (write-char c out)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; JSON Serialization
