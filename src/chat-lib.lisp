@@ -314,20 +314,21 @@ Be concise. Show your reasoning.")
     (mv-let (new-agent state)
       (chat-turn msg *chat-agent* *chat-model* *chat-mcp* state)
       (mv nil
-          `(defconst *chat-agent* ',new-agent)
+          `(progn (redef+)
+                  (defconst *chat-agent* ',new-agent)
+                  (redef-))
           state))))
 
 #-skip-interactive
 (defmacro chat (msg)
   "Send a message to the chat agent. Example: (chat \"Hello!\")"
-  `(progn
-     (set-ld-redefinition-action '(:doit . :overwrite) state)
-     (make-event (chat-fn ,msg state))))
+  `(make-event (chat-fn ,msg state)))
 
 #-skip-interactive
 (defmacro chat-reset ()
   "Reset the conversation to initial state."
   '(progn
-     (set-ld-redefinition-action '(:doit . :overwrite) state)
+     (redef+)
      (defconst *chat-agent* *initial-chat-state*)
+     (redef-)
      (value-triple :chat-reset)))
