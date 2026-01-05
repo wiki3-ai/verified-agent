@@ -54,7 +54,13 @@ cd src
 cert.pl verified-agent.lisp
 ```
 
-### 3. Run Interactive Demo (requires LM Studio)
+### 3. Start acl2-mcp
+```bash
+pip install mcp-proxy
+mcp-proxy acl2-mcp --transport streamablehttp --port 8000 --pass-environment
+```
+
+### 4. Run Interactive Demo (requires LM Studio)
 
 Start LM Studio with a model loaded, then in ACL2:
 
