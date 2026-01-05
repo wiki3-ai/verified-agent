@@ -1,12 +1,11 @@
 ; Chat Library - Common definitions for interactive chat
 ; =====================================================
 ; This file provides the core functions for running a ReAct agent
-; with LLM and code execution support. Include this book, then use
-; (chat "your message") for simple interaction.
+; with LLM and code execution support.
 ;
 ; Usage:
 ;   (include-book "chat-lib" :ttags ...)
-;   (chat "Hello, can you help me with ACL2?")
+;   Then use interactive-chat-loop or build your own chat flow.
 
 (in-package "ACL2")
 
@@ -259,3 +258,76 @@ Be concise. Show your reasoning.")
                                   (mcp-connection->acl2-session-id mcp-conn))
                             (cw "Warning: No persistent ACL2 session (slower mode).~%"))
                     (interactive-chat-loop-aux agent-st model-id mcp-conn state)))))))))))
+
+;;;============================================================================
+;;; Session State Setup
+;;;============================================================================
+
+;; Initialize fresh agent state
+(defconst *initial-chat-state*
+  (init-agent-conversation *default-system-prompt* *default-agent-config*))
+
+;;;============================================================================
+;;; Chat Interface (skipped during certification)
+;;; These define session state and the (chat "...") macro for interactive use.
+;;;============================================================================
+
+; cert_param: (cert_env "SKIP_INTERACTIVE=1")
+
+#-skip-interactive
+(make-event
+ (mv-let (err models state)
+   (llm-list-models-full state)
+   (declare (ignorable err))
+   (let* ((selected (select-completions-model models *model-prefs*))
+          (model-id (if selected (model-info->id selected) "no-model-found")))
+     (prog2$
+      (if selected
+          (cw "~%Selected model: ~s0 (context: ~x1 tokens)~%"
+              model-id
+              (model-info->loaded-context-length selected))
+        (cw "~%WARNING: No model found. Ensure LM Studio is running.~%"))
+      (mv nil `(defconst *chat-model* ,model-id) state)))))
+
+#-skip-interactive
+(make-event
+ (mv-let (mcp-err mcp-conn state)
+   (mcp-connect *mcp-default-endpoint* state)
+   (prog2$
+    (if mcp-err
+        (cw "~%MCP connection failed: ~s0~%Code execution disabled.~%" mcp-err)
+      (prog2$
+       (cw "~%MCP connected.~%")
+       (if (mcp-connection-has-acl2-session-p mcp-conn)
+           (cw "ACL2 session: ~s0~%" (mcp-connection->acl2-session-id mcp-conn))
+         (cw "No persistent ACL2 session.~%"))))
+    (mv nil `(defconst *chat-mcp* ',mcp-conn) state))))
+
+#-skip-interactive
+(defconst *chat-agent* *initial-chat-state*)
+
+#-skip-interactive
+(defun chat-fn (msg state)
+  "Send a message and get a response. Updates *chat-agent* state."
+  (declare (xargs :mode :program :stobjs state))
+  (prog2$ (cw "~%You: ~s0~%" msg)
+    (mv-let (new-agent state)
+      (chat-turn msg *chat-agent* *chat-model* *chat-mcp* state)
+      (mv nil
+          `(defconst *chat-agent* ',new-agent)
+          state))))
+
+#-skip-interactive
+(defmacro chat (msg)
+  "Send a message to the chat agent. Example: (chat \"Hello!\")"
+  `(progn
+     (set-ld-redefinition-action '(:doit . :overwrite) state)
+     (make-event (chat-fn ,msg state))))
+
+#-skip-interactive
+(defmacro chat-reset ()
+  "Reset the conversation to initial state."
+  '(progn
+     (set-ld-redefinition-action '(:doit . :overwrite) state)
+     (defconst *chat-agent* *initial-chat-state*)
+     (value-triple :chat-reset)))
