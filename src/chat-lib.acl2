@@ -1,5 +1,6 @@
 ; Certification setup for chat-lib.lisp
 ; Requires ttags for quicklisp/dexador (via llm-client and mcp-client)
+; Uses SKIP_INTERACTIVE to skip dynamic definitions during certification
 
 (in-package "ACL2")
 
