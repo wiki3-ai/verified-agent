@@ -1,0 +1,6 @@
+; Certification setup for parinfer-fixer.lisp
+; Requires ttag :parinfer-fixer for sys-call+ (shell command execution)
+
+(in-package "ACL2")
+
+; cert-flags: ? t :ttags :all
