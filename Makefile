@@ -122,6 +122,71 @@ install-deps:
 	pip install -e acl2-mcp
 
 # =============================================================================
+# ACL2 Bridge SBCL Port (from PR #1882)
+# =============================================================================
+# Merges the SBCL port of ACL2 Bridge from:
+# https://github.com/acl2/acl2/pull/1882
+#
+# This adds support for running ACL2 Bridge on SBCL (in addition to CCL)
+
+BRIDGE_PR_BRANCH := jimwhite/acl2:bridge2sbcl
+BRIDGE_PR_RAW_BASE := https://raw.githubusercontent.com/jimwhite/acl2/bridge2sbcl
+BRIDGE_DIR := $(ACL2_SYSTEM_BOOKS)/centaur/bridge
+
+# Download and install ACL2 Bridge SBCL files from PR #1882
+install-bridge-sbcl:
+	@if [ -z "$$ACL2_SYSTEM_BOOKS" ]; then \
+		echo "Error: ACL2_SYSTEM_BOOKS environment variable not set"; \
+		echo "Set it to your ACL2 books directory, e.g.:"; \
+		echo "  export ACL2_SYSTEM_BOOKS=/path/to/acl2/books"; \
+		exit 1; \
+	fi
+	@echo "Installing ACL2 Bridge SBCL port from PR #1882..."
+	@echo "Target directory: $(BRIDGE_DIR)"
+	@mkdir -p "$(BRIDGE_DIR)"
+	@echo ""
+	@echo "Downloading bridge-sbcl-raw.lsp..."
+	@curl -sSfL "$(BRIDGE_PR_RAW_BASE)/books/centaur/bridge/bridge-sbcl-raw.lsp" \
+		-o "$(BRIDGE_DIR)/bridge-sbcl-raw.lsp"
+	@echo "  ✓ bridge-sbcl-raw.lsp"
+	@echo ""
+	@echo "Downloading updated top.lisp..."
+	@curl -sSfL "$(BRIDGE_PR_RAW_BASE)/books/centaur/bridge/top.lisp" \
+		-o "$(BRIDGE_DIR)/top.lisp"
+	@echo "  ✓ top.lisp"
+	cert.pl $(BRIDGE_DIR)/top.lisp
+	@echo ""
+	@echo "ACL2 Bridge SBCL port installed successfully!"
+
+
+# Check if ACL2 Bridge SBCL files are installed
+check-bridge-sbcl:
+	@if [ -z "$$ACL2_SYSTEM_BOOKS" ]; then \
+		echo "Error: ACL2_SYSTEM_BOOKS environment variable not set"; \
+		exit 1; \
+	fi
+	@echo "Checking ACL2 Bridge SBCL installation..."
+	@if [ -f "$(BRIDGE_DIR)/bridge-sbcl-raw.lsp" ]; then \
+		echo "  ✓ bridge-sbcl-raw.lsp"; \
+	else \
+		echo "  ✗ bridge-sbcl-raw.lsp (not found)"; \
+	fi
+	@if grep -q "bridge-sbcl-raw.lsp" "$(BRIDGE_DIR)/top.lisp" 2>/dev/null; then \
+		echo "  ✓ top.lisp (has SBCL support)"; \
+	else \
+		echo "  ✗ top.lisp (missing SBCL support)"; \
+	fi
+
+# Certify ACL2 Bridge (requires quicklisp books on SBCL)
+certify-bridge:
+	@if [ -z "$$ACL2_SYSTEM_BOOKS" ]; then \
+		echo "Error: ACL2_SYSTEM_BOOKS environment variable not set"; \
+		exit 1; \
+	fi
+	@echo "Certifying ACL2 Bridge..."
+	cd "$(BRIDGE_DIR)" && cert.pl top.lisp
+
+# =============================================================================
 # Rust and Parinfer Setup
 # =============================================================================
 
@@ -182,4 +247,7 @@ help:
 	@echo "  install-parinfer      - Install parinfer-rust CLI"
 	@echo "  test-parinfer         - Test parinfer-rust installation"
 	@echo "  cargo-run CMD=...     - Run a command with Cargo environment"
+	@echo "  install-bridge-sbcl   - Install ACL2 Bridge SBCL port (PR #1882)"
+	@echo "  check-bridge-sbcl     - Check if Bridge SBCL files are installed"
+	@echo "  certify-bridge        - Certify ACL2 Bridge book"
 
