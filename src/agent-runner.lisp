@@ -8,6 +8,7 @@
 ; - verified-agent.lisp (decision logic, state management)
 ; - llm-client.lisp (LLM chat completions)
 ; - mcp-client.lisp (code execution via acl2-mcp)
+; - parinfer-fixer.lisp (fix unbalanced parens in LLM output)
 ;
 ; The verified agent decides what to do; this runner executes it.
 
@@ -23,6 +24,10 @@
                       (:http-json) (:llm-client)))
 (include-book "mcp-client"
               :ttags ((:quicklisp) (:quicklisp.dexador) (:http-json) (:mcp-client)))
+
+;; Parinfer fixer is loaded separately since it uses sys-call+
+;; which requires trust tags. We'll include it conditionally.
+;; For now, define the interface here and it can be loaded at runtime.
 
 ;;;============================================================================
 ;;; Tool Specifications for Code Execution
@@ -159,6 +164,94 @@ Be concise. Show your reasoning.")
           (mv t (my-string-trim (subseq rest 0 end-pos))))))))
 
 ;;;============================================================================
+;;; Parinfer Integration - Fix Unbalanced Parens in LLM Output
+;;;============================================================================
+
+;; Configuration
+(defconst *parinfer-rust-cmd* "parinfer-rust")
+(defconst *parinfer-default-mode* "indent")  ; Infer parens from indentation
+(defconst *parinfer-lisp-options* "--lisp-block-comments")
+
+;; Enable/disable parinfer fixing (can be set to nil to disable)
+(defconst *use-parinfer* t)
+
+;; Simple paren balance check (doesn't handle strings/comments)
+(defun parens-balanced-p (str)
+  (declare (xargs :mode :program))
+  (parens-balanced-aux (coerce str 'list) 0 0 0))
+
+(defun parens-balanced-aux (chars parens brackets braces)
+  (declare (xargs :mode :program))
+  (if (endp chars)
+      (and (= parens 0) (= brackets 0) (= braces 0))
+    (let ((ch (car chars)))
+      (cond
+        ((eql ch #\() (parens-balanced-aux (cdr chars) (1+ parens) brackets braces))
+        ((eql ch #\)) (if (> parens 0)
+                          (parens-balanced-aux (cdr chars) (1- parens) brackets braces)
+                        nil))
+        ((eql ch #\[) (parens-balanced-aux (cdr chars) parens (1+ brackets) braces))
+        ((eql ch #\]) (if (> brackets 0)
+                          (parens-balanced-aux (cdr chars) parens (1- brackets) braces)
+                        nil))
+        ((eql ch #\{) (parens-balanced-aux (cdr chars) parens brackets (1+ braces)))
+        ((eql ch #\}) (if (> braces 0)
+                          (parens-balanced-aux (cdr chars) parens brackets (1- braces))
+                        nil))
+        (t (parens-balanced-aux (cdr chars) parens brackets braces))))))
+
+;; Run parinfer-rust to fix code
+;; Returns (mv error-string fixed-code state)
+(defun run-parinfer (code state)
+  (declare (xargs :mode :program :stobjs state))
+  (b* (;; Write input to temp file
+       (temp-in "/tmp/parinfer-input.lisp")
+       (temp-out "/tmp/parinfer-output.lisp")
+       ((mv channel state)
+        (open-output-channel temp-in :character state))
+       ((when (not channel))
+        (mv "Failed to open temp input file" code state))
+       (state (princ$ code channel state))
+       (state (close-output-channel channel state))
+       ;; Build command
+       (cmd (concatenate 'string 
+                         ". \"$HOME/.cargo/env\" && "
+                         *parinfer-rust-cmd*
+                         " -m " *parinfer-default-mode*
+                         " " *parinfer-lisp-options*
+                         " < " temp-in " > " temp-out " 2>&1"))
+       ;; Run command
+       ((mv exit-code state) (sys-call+ "sh" (list "-c" cmd) state))
+       ;; Read output
+       ((mv output state) (read-file-into-string temp-out state)))
+    (if (and (eql exit-code 0) output)
+        (mv nil output state)
+      ;; If parinfer fails, return original code
+      (mv (concatenate 'string "Parinfer failed (exit " 
+                       (coerce (explode-atom (or exit-code -1) 10) 'string) ")")
+          code state))))
+
+;; Fix code using parinfer if enabled and needed
+;; Returns (mv was-fixed error fixed-code state)
+(defun maybe-fix-code (code state)
+  (declare (xargs :mode :program :stobjs state))
+  (if (not *use-parinfer*)
+      (mv nil nil code state)
+    (b* (;; Quick check if parens look balanced
+         (looks-ok (parens-balanced-p code))
+         ;; Run parinfer regardless to fix structure
+         ((mv err fixed state) (run-parinfer code state))
+         ((when err)
+          ;; Log warning but continue with original code
+          (prog2$ (cw "~%[Warning] ~s0~%" err)
+                  (mv nil err code state)))
+         ;; Check if code changed
+         (was-fixed (not (equal (my-string-trim code) (my-string-trim fixed)))))
+      (when was-fixed
+        (cw "~%[Parinfer] Fixed code structure~%"))
+      (mv was-fixed nil (my-string-trim fixed) state))))
+
+;;;============================================================================
 ;;; Execute Code via MCP
 ;;;============================================================================
 
@@ -226,10 +319,16 @@ Be concise. Show your reasoning.")
     (if (not found?)
         ;; No code block - agent is done, return final response
         (mv nil nil (change-runtime-state rst :agent agent-st) state)
-      ;; Execute the code
-      (b* ((- (cw "~%[Executing ACL2 code:]~%~s0~%" code))
+      ;; Fix code using parinfer if needed, then execute
+      (b* (;; Apply parinfer to fix any paren issues from LLM
+           ((mv was-fixed fix-err fixed-code state) (maybe-fix-code code state))
+           (code-to-run (if fix-err code fixed-code))
+           (- (when was-fixed 
+                (cw "~%[Original code:]~%~s0~%" code)
+                (cw "~%[Fixed code:]~%~s0~%" code-to-run)))
+           (- (cw "~%[Executing ACL2 code:]~%~s0~%" code-to-run))
            ((mv tool-err result state)
-            (execute-acl2-code code mcp-conn state))
+            (execute-acl2-code code-to-run mcp-conn state))
            
            (tool-result (if tool-err
                             (concatenate 'string "Error: " tool-err)
