@@ -129,11 +129,13 @@ install-deps:
 #
 # This adds support for running ACL2 Bridge on SBCL (in addition to CCL)
 
-BRIDGE_PR_BRANCH := jimwhite/acl2:bridge2sbcl
-BRIDGE_PR_RAW_BASE := https://raw.githubusercontent.com/jimwhite/acl2/bridge2sbcl
+BRIDGE_PR_REPO := https://github.com/jimwhite/acl2.git
+BRIDGE_PR_BRANCH := bridge2sbcl
 BRIDGE_DIR := $(ACL2_SYSTEM_BOOKS)/centaur/bridge
+BRIDGE_FILES := books/centaur/bridge/bridge-sbcl-raw.lsp books/centaur/bridge/top.lisp
 
-# Download and install ACL2 Bridge SBCL files from PR #1882
+# Download and install ACL2 Bridge SBCL files from PR #1882 using git
+# Uses sparse checkout to fetch only the bridge directory
 install-bridge-sbcl:
 	@if [ -z "$$ACL2_SYSTEM_BOOKS" ]; then \
 		echo "Error: ACL2_SYSTEM_BOOKS environment variable not set"; \
@@ -142,18 +144,18 @@ install-bridge-sbcl:
 		exit 1; \
 	fi
 	@echo "Installing ACL2 Bridge SBCL port from PR #1882..."
-	@echo "Target directory: $(BRIDGE_DIR)"
-	@mkdir -p "$(BRIDGE_DIR)"
+	@echo "Using sparse checkout to fetch bridge files..."
+	@rm -rf /tmp/acl2-bridge-pr
+	git clone --depth 1 --filter=blob:none --sparse \
+		$(BRIDGE_PR_REPO) -b $(BRIDGE_PR_BRANCH) /tmp/acl2-bridge-pr
+	cd /tmp/acl2-bridge-pr && git sparse-checkout set books/centaur/bridge
 	@echo ""
-	@echo "Downloading bridge-sbcl-raw.lsp..."
-	@curl -sSfL "$(BRIDGE_PR_RAW_BASE)/books/centaur/bridge/bridge-sbcl-raw.lsp" \
-		-o "$(BRIDGE_DIR)/bridge-sbcl-raw.lsp"
+	@echo "Copying files to $(BRIDGE_DIR)..."
+	cp /tmp/acl2-bridge-pr/books/centaur/bridge/bridge-sbcl-raw.lsp "$(BRIDGE_DIR)/"
+	cp /tmp/acl2-bridge-pr/books/centaur/bridge/top.lisp "$(BRIDGE_DIR)/"
 	@echo "  ✓ bridge-sbcl-raw.lsp"
-	@echo ""
-	@echo "Downloading updated top.lisp..."
-	@curl -sSfL "$(BRIDGE_PR_RAW_BASE)/books/centaur/bridge/top.lisp" \
-		-o "$(BRIDGE_DIR)/top.lisp"
 	@echo "  ✓ top.lisp"
+	@rm -rf /tmp/acl2-bridge-pr
 	cert.pl $(BRIDGE_DIR)/top.lisp
 	@echo ""
 	@echo "ACL2 Bridge SBCL port installed successfully!"
