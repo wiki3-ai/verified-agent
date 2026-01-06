@@ -1,5 +1,6 @@
 ; Certification setup for agent-runner.lisp
 ; Requires ttags for quicklisp/dexador (via http-json, llm-client, mcp-client)
+; and :parinfer for sys-call+ (parinfer shell integration)
 
 (in-package "ACL2")
 

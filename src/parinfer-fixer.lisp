@@ -14,6 +14,18 @@
 (in-package "ACL2")
 
 ;;;============================================================================
+;;; Dependencies
+;;;============================================================================
+
+(include-book "std/util/bstar" :dir :system)
+
+;;;============================================================================
+;;; Trust tag for sys-call+
+;;;============================================================================
+
+(defttag :parinfer-fixer)
+
+;;;============================================================================
 ;;; Configuration
 ;;;============================================================================
 
@@ -29,6 +41,38 @@
 
 ;; Language option for Common Lisp / ACL2 (enables #| |# block comments)
 (defconst *parinfer-lisp-options* "--lisp-block-comments")
+
+;;;============================================================================
+;;; Code Validation (helper must be defined before caller)
+;;;============================================================================
+
+(defun parens-balanced-simple-aux (chars parens brackets braces)
+  (declare (xargs :mode :program))
+  (if (endp chars)
+      (and (= parens 0) (= brackets 0) (= braces 0))
+    (let ((ch (car chars)))
+      (cond
+        ((eql ch #\() (parens-balanced-simple-aux (cdr chars) (1+ parens) brackets braces))
+        ((eql ch #\)) (if (> parens 0)
+                          (parens-balanced-simple-aux (cdr chars) (1- parens) brackets braces)
+                        nil)) ; Unmatched close paren
+        ((eql ch #\[) (parens-balanced-simple-aux (cdr chars) parens (1+ brackets) braces))
+        ((eql ch #\]) (if (> brackets 0)
+                          (parens-balanced-simple-aux (cdr chars) parens (1- brackets) braces)
+                        nil))
+        ((eql ch #\{) (parens-balanced-simple-aux (cdr chars) parens brackets (1+ braces)))
+        ((eql ch #\}) (if (> braces 0)
+                          (parens-balanced-simple-aux (cdr chars) parens brackets (1- braces))
+                        nil))
+        (t (parens-balanced-simple-aux (cdr chars) parens brackets braces))))))
+
+;; Check if parentheses are balanced in a string
+;; Returns t if balanced, nil otherwise
+;; Note: This is a simple check that doesn't handle strings/comments
+(defun parens-balanced-simple (str)
+  (declare (xargs :mode :program))
+  (let ((chars (coerce str 'list)))
+    (parens-balanced-simple-aux chars 0 0 0)))
 
 ;;;============================================================================
 ;;; Shell Command Execution (Program Mode)
@@ -50,13 +94,14 @@
        (state (close-output-channel channel state))
        ;; Run the command: cmd < temp-in > temp-out
        (full-cmd (concatenate 'string cmd " < " temp-in " > " temp-out " 2>&1"))
-       ((mv exit-code state) (sys-call+ "sh" (list "-c" full-cmd) state))
-       ;; Read the output
-       ((mv output state) (read-file-into-string temp-out state)))
-    (if (and (eql exit-code 0) output)
+       ;; sys-call+ returns (mv erp val state) - 3 values
+       ((mv exit-code ?cmd-output state) (sys-call+ "sh" (list "-c" full-cmd) state))
+       ;; read-file-into-string2 returns just a string (not mv)
+       (output (read-file-into-string2 temp-out 0 nil :default state)))
+    (if (and (not exit-code) output)
         (mv nil output state)
       (mv (concatenate 'string "Command failed with exit code: " 
-                       (coerce (explode-atom exit-code 10) 'string))
+                       (coerce (explode-atom (or exit-code -1) 10) 'string))
           (or output "") state))))
 
 ;;;============================================================================
@@ -68,7 +113,9 @@
 ;; Returns (mv error-string fixed-code state)
 (defun parinfer-fix-code (code state)
   (declare (xargs :mode :program :stobjs state))
+  ;; Source cargo env to ensure parinfer-rust is in PATH
   (let* ((cmd (concatenate 'string 
+                           ". \"$HOME/.cargo/env\" && "
                            *parinfer-rust-cmd* 
                            " -m " *parinfer-default-mode*
                            " " *parinfer-lisp-options*)))
@@ -78,43 +125,13 @@
 ;; mode should be "indent", "paren", or "smart"
 (defun parinfer-fix-code-with-mode (code mode state)
   (declare (xargs :mode :program :stobjs state))
+  ;; Source cargo env to ensure parinfer-rust is in PATH
   (let* ((cmd (concatenate 'string 
+                           ". \"$HOME/.cargo/env\" && "
                            *parinfer-rust-cmd* 
                            " -m " mode
                            " " *parinfer-lisp-options*)))
     (run-shell-command-with-input cmd code state)))
-
-;;;============================================================================
-;;; Code Validation
-;;;============================================================================
-
-;; Check if parentheses are balanced in a string
-;; Returns t if balanced, nil otherwise
-;; Note: This is a simple check that doesn't handle strings/comments
-(defun parens-balanced-simple (str)
-  (declare (xargs :mode :program))
-  (let ((chars (coerce str 'list)))
-    (parens-balanced-simple-aux chars 0 0 0)))
-
-(defun parens-balanced-simple-aux (chars parens brackets braces)
-  (declare (xargs :mode :program))
-  (if (endp chars)
-      (and (= parens 0) (= brackets 0) (= braces 0))
-    (let ((ch (car chars)))
-      (cond
-        ((eql ch #\() (parens-balanced-simple-aux (cdr chars) (1+ parens) brackets braces))
-        ((eql ch #\)) (if (> parens 0)
-                          (parens-balanced-simple-aux (cdr chars) (1- parens) brackets braces)
-                        nil)) ; Unmatched close paren
-        ((eql ch #\[) (parens-balanced-simple-aux (cdr chars) parens (1+ brackets) braces))
-        ((eql ch #\]) (if (> brackets 0)
-                          (parens-balanced-simple-aux (cdr chars) parens (1- brackets) braces)
-                        nil))
-        ((eql ch #\{) (parens-balanced-simple-aux (cdr chars) parens brackets (1+ braces)))
-        ((eql ch #\}) (if (> braces 0)
-                          (parens-balanced-simple-aux (cdr chars) parens brackets (1- braces))
-                        nil))
-        (t (parens-balanced-simple-aux (cdr chars) parens brackets braces))))))
 
 ;;;============================================================================
 ;;; High-Level API for Agent Integration
