@@ -156,6 +156,8 @@ install-parinfer: install-rust
 # Test parinfer-rust installation  
 test-parinfer:
 	@$(CARGO) echo '(def x' | parinfer-rust -m indent
+	@$(CARGO) echo '(defun foo (x)' | parinfer-rust -m indent --lisp-block-comments
+	@echo "Parinfer tests passed!"
 
 # Run a command with Rust/Cargo environment
 # Usage: make cargo-run CMD="cargo --version"

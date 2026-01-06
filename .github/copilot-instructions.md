@@ -67,6 +67,7 @@ verified-agent/
 │   ├── mcp-client.lisp     # MCP JSON-RPC client
 │   ├── mcp-client-raw.lsp  # Raw Lisp MCP serialization
 │   ├── agent-runner.lisp   # Runtime driver for code execution agent
+│   ├── parinfer-fixer.lisp # Fix unbalanced parens in LLM output
 │   └── chat-demo.lisp      # Interactive demo
 ├── acl2-mcp/               # Python MCP server for ACL2
 │   ├── acl2_mcp/           # Python package
@@ -84,6 +85,7 @@ verified-agent/
 2. **Keep verified core simple** — Complex operations (LLM, code execution) handled by external driver
 3. **FTY over STObj** — Cleaner types, auto-generated theorems, easier reasoning
 4. **MCP for external tools** — acl2-mcp provides code execution, future: Oxigraph, Qdrant
+5. **Fix LLM output with parinfer** — Automatically correct unbalanced parens using indentation
 
 ## Key Files
 
@@ -94,7 +96,8 @@ verified-agent/
 | `llm-types.lisp` | FTY message types (chat-role, chat-message) |
 | `llm-client.lisp` | HTTP client for LM Studio |
 | `mcp-client.lisp` | MCP client with persistent ACL2 sessions |
-| `agent-runner.lisp` | Runtime driver integrating all components |
+| `agent-runner.lisp` | Runtime driver integrating all components + parinfer |
+| `parinfer-fixer.lisp` | Parinfer integration for fixing LLM code output |
 | `chat-demo.lisp` | Interactive ReAct demo with code execution |
 
 ## Permission Model
@@ -207,6 +210,21 @@ mcp-proxy acl2-mcp --transport streamablehttp --port 8000 --pass-environment
 
 LLM calls go to LM Studio on host: `http://host.docker.internal:1234/v1`
 
-## Resources
+## Parinfer Integration
 
-- [Verified Agent Spec](src/Verified_Agent_Spec.md) - Complete specification
+The agent uses [parinfer-rust](https://github.com/eraserhd/parinfer-rust) to fix unbalanced parentheses in LLM-generated code. Parinfer's "indent mode" infers correct parentheses from indentation, which is ideal since LLMs typically get indentation right but parens wrong.
+
+```bash
+# Install parinfer-rust
+make install-parinfer
+
+# Test installation
+make test-parinfer
+
+# Manual usage
+echo '(defun foo (x)
+  (+ x 1' | parinfer-rust -m indent --lisp-block-comments
+# Output: (defun foo (x)
+#           (+ x 1))
+```
+

@@ -9,6 +9,7 @@ This is the ACL2 Verified Agent project - a formally verified ReAct agent in ACL
 - Uses FTY types for clean type definitions
 - Integrates with LLMs via LM Studio
 - Executes code via MCP protocol
+- Auto-fixes LLM paren errors with parinfer
 
 ### Key Commands
 ```bash
@@ -18,11 +19,16 @@ cd src && cert.pl verified-agent.lisp
 # Run interactive demo (requires LM Studio)
 acl2
 (ld "chat-demo.lisp")
+
+# Install parinfer for fixing LLM code
+make install-parinfer
+make test-parinfer
 ```
 
 ### File Locations
 - **Source code**: `src/`
 - **Main agent**: `src/verified-agent.lisp`
+- **Parinfer fixer**: `src/parinfer-fixer.lisp`
 - **MCP server**: `acl2-mcp/acl2_mcp/server.py`
 - **Spec**: `src/Verified_Agent_Spec.md`
 - **Copilot instructions**: `.github/copilot-instructions.md`
@@ -37,3 +43,13 @@ acl2
 - Use `(let ((var (accessor obj))) (case-macro var ...))` for FTY case macros
 - Include `:type-prescription` for return-type theorems used in guards
 - Use `(local ...)` for helper lemmas
+
+### Parinfer Integration
+The agent uses parinfer-rust to fix unbalanced parens in LLM output:
+```bash
+# Example: LLM generates code with missing parens
+echo '(defun foo (x)
+  (+ x 1' | parinfer-rust -m indent --lisp-block-comments
+# Output: (defun foo (x)
+#           (+ x 1))
+```

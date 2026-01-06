@@ -19,6 +19,7 @@ This project demonstrates how to build AI agents with **formally verified decisi
 - ✅ **Proven termination** via max-steps bound
 - ✅ **MCP integration** for ACL2 code execution with persistent sessions
 - ✅ **LLM integration** via LM Studio's OpenAI-compatible API
+- ✅ **Parinfer integration** to auto-fix unbalanced parens in LLM-generated code
 
 ## Proven Properties
 
@@ -111,6 +112,7 @@ verified-agent/
 │   ├── mcp-client.lisp         # MCP JSON-RPC client
 │   ├── mcp-client-raw.lsp      # Raw Lisp MCP serialization
 │   ├── agent-runner.lisp       # Runtime driver for code execution
+│   ├── parinfer-fixer.lisp     # Fix unbalanced parens in LLM output
 │   ├── chat-demo.lisp          # Interactive demo
 │   └── Verified_Agent_Spec.md  # Full specification
 ├── acl2-mcp/                   # Python MCP server
@@ -175,6 +177,30 @@ The agent can execute ACL2 code through the MCP protocol:
 (mcp-acl2-evaluate conn "(+ 1 2 3)")  ; => "6"
 ```
 
+### Parinfer: Fixing LLM Code Errors
+
+LLMs often generate Lisp code with unbalanced parentheses, even though the indentation is correct. The agent uses [parinfer-rust](https://github.com/eraserhd/parinfer-rust) to automatically fix these errors before execution:
+
+```lisp
+;; LLM output (missing closing parens):
+(defun factorial (n)
+  (if (zp n)
+      1
+    (* n (factorial (1- n)
+
+;; After parinfer fix:
+(defun factorial (n)
+  (if (zp n)
+      1
+    (* n (factorial (1- n)))))
+```
+
+Install parinfer-rust:
+```bash
+make install-parinfer  # Installs Rust + parinfer-rust from GitHub
+make test-parinfer     # Verify installation
+```
+
 ## Development
 
 ### Running Tests
@@ -200,6 +226,7 @@ mcp-proxy acl2-mcp --transport streamablehttp --port 8000 --pass-environment
 2. **FTY over STObj** — Cleaner types, auto-generated theorems, easier reasoning
 3. **MCP for external tools** — Standard protocol for tool integration
 4. **Keep verified core simple** — Complex I/O in external driver, proofs in ACL2
+5. **Fix LLM output with parinfer** — Automatically correct unbalanced parens using indentation
 
 ## License
 
@@ -210,3 +237,4 @@ BSD 3-Clause License. See [LICENSE](LICENSE).
 - Built with [ACL2](https://www.cs.utexas.edu/users/moore/acl2/)
 - LLM integration via [LM Studio](https://lmstudio.ai/)
 - MCP implementation using [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
+- Paren fixing via [parinfer-rust](https://github.com/eraserhd/parinfer-rust)
