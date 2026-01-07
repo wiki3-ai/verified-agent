@@ -23,13 +23,21 @@ This project demonstrates how to build AI agents with **formally verified decisi
 
 ## Proven Properties
 
+All theorems are in [verified-agent.lisp](src/verified-agent.lisp) unless noted.
+
 | Theorem | What It Proves |
 |---------|----------------|
 | `permission-safety` | Tool invocation requires permission |
 | `budget-bounds-after-deduct` | Budgets remain non-negative |
 | `termination-by-max-steps` | Agent halts within max-steps |
-| `truncate-preserves-system-prompt` | System message survives truncation |
-| `error-state-forces-must-respond` | Errors halt the agent |
+| `truncate-preserves-system-prompt` | System message survives truncation ([context-manager.lisp](src/context-manager.lisp)) |
+| `error-state-forces-must-respond` | Internal errors (resource exhaustion, etc.) halt the agent |
+| `add-tool-result-preserves-error-state` | Tool results don't change internal error state |
+| `add-tool-result-preserves-has-error-p` | Tool results don't affect error status |
+| `add-tool-result-preserves-done` | Tool results don't change done flag |
+| `external-tool-call-bounded` | External tool responses have bounded length |
+
+> **Note:** Tool execution errors are *not* internal errors—they are returned to the agent as messages so it can see and recover from them. The `add-tool-result-preserves-*` theorems prove this is safe. Only infrastructure failures (LLM unreachable, budget exhausted) halt the loop.
 
 ## Quick Start
 
