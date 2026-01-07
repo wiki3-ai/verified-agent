@@ -23,21 +23,59 @@ This project demonstrates how to build AI agents with **formally verified decisi
 
 ## Proven Properties
 
-All theorems are in [verified-agent.lisp](src/verified-agent.lisp) unless noted.
+All theorems are in [verified-agent.lisp](src/verified-agent.lisp) unless noted otherwise.
+
+### Safety & Termination
 
 | Theorem | What It Proves |
 |---------|----------------|
 | `permission-safety` | Tool invocation requires permission |
-| `budget-bounds-after-deduct` | Budgets remain non-negative |
-| `termination-by-max-steps` | Agent halts within max-steps |
-| `truncate-preserves-system-prompt` | System message survives truncation ([context-manager.lisp](src/context-manager.lisp)) |
-| `error-state-forces-must-respond` | Internal errors (resource exhaustion, etc.) halt the agent |
+| `budget-bounds-after-deduct` | Budgets remain non-negative after deduction |
+| `termination-by-max-steps` | Reaching max-steps forces agent to respond |
+| `remaining-steps-decreases-after-increment` | Step counter progress guarantees termination |
+| `error-state-forces-must-respond` | Internal errors halt the agent |
+
+### State Partitioning
+
+| Theorem | What It Proves |
+|---------|----------------|
+| `continue-respond-partition` | Agent is always in exactly one of: must-respond, should-continue, or satisfied |
+| `step-increases-after-increment` | Step counter strictly increases each iteration |
+
+### Conversation Safety (tool results don't break the agent)
+
+| Theorem | What It Proves |
+|---------|----------------|
 | `add-tool-result-preserves-error-state` | Tool results don't change internal error state |
 | `add-tool-result-preserves-has-error-p` | Tool results don't affect error status |
 | `add-tool-result-preserves-done` | Tool results don't change done flag |
-| `external-tool-call-bounded` | External tool responses have bounded length |
+| `add-assistant-msg-preserves-must-respond-p` | Assistant messages don't change termination status |
 
-> **Note:** Tool execution errors are *not* internal errors—they are returned to the agent as messages so it can see and recover from them. The `add-tool-result-preserves-*` theorems prove this is safe. Only infrastructure failures (LLM unreachable, budget exhausted) halt the loop.
+### Context Management ([context-manager.lisp](src/context-manager.lisp))
+
+| Theorem | What It Proves |
+|---------|----------------|
+| `truncate-preserves-system-prompt` | System message survives context truncation |
+| `truncate-to-fit-length-bound` | Truncated list never exceeds original length |
+| `drop-oldest-until-fit-is-sublist` | Dropped messages are a sublist of original |
+| `add-message-returns-list` | Adding messages preserves list type |
+
+### External Tool Axioms (encapsulated)
+
+| Axiom | What It Guarantees |
+|---------|----------------|
+| `external-tool-call-returns-list` | Tool calls return a proper list |
+| `external-tool-call-bounded` | Response length is bounded (resource safety) |
+
+### Type Preservation
+
+| Theorem | What It Proves |
+|---------|----------------|
+| `react-step-preserves-agent-state` | ReAct step returns valid agent state |
+| `deduct-preserves-agent-state` | Budget deduction returns valid agent state |
+| `increment-preserves-agent-state` | Step increment returns valid agent state |
+
+> **Note on error handling:** Tool execution errors are *not* internal errors—they are returned to the agent as messages so it can see and recover from them. The `add-tool-result-preserves-*` theorems prove this is safe. Only infrastructure failures (LLM unreachable, budget exhausted) halt the loop.
 
 ## Quick Start
 
