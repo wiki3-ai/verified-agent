@@ -40,6 +40,9 @@
 (defconst *openai-endpoint*
   "https://api.openai.com/v1/chat/completions")
 
+(defconst *openai-completions-endpoint*
+  "https://api.openai.com/v1/completions")
+
 (defconst *openai-models-endpoint*
   "https://api.openai.com/v1/models")
 
@@ -98,6 +101,20 @@
 (defthm stringp-of-serialize-chat-request
   (stringp (serialize-chat-request model messages)))
 
+;; Serialize completions request (for Codex models)
+;; Input: model (stringp), messages (chat-message-list-p), max-tokens (natp)
+;; Output: stringp like {"model":"...","prompt":"...","max_tokens":...}
+(defun serialize-completions-request (model messages max-tokens)
+  (declare (xargs :guard (and (stringp model) 
+                              (chat-message-list-p messages)
+                              (natp max-tokens)))
+           (ignore model messages max-tokens))
+  (prog2$ (er hard? 'serialize-completions-request "Raw Lisp definition not installed?")
+          "{}"))
+
+(defthm stringp-of-serialize-completions-request
+  (stringp (serialize-completions-request model messages max-tokens)))
+
 ;; Parse chat completion response JSON, extract assistant message content
 ;; Input: json response string
 ;; Output: content string (empty on parse failure)
@@ -110,6 +127,18 @@
 
 (defthm stringp-of-parse-chat-response
   (stringp (parse-chat-response json)))
+
+;; Parse completions response JSON, extract generated text
+;; Input: json response string
+;; Output: text string (empty on parse failure)
+(defun parse-completions-response (json)
+  (declare (xargs :guard (stringp json))
+           (ignore json))
+  (prog2$ (er hard? 'parse-completions-response "Raw Lisp definition not installed?")
+          ""))
+
+(defthm stringp-of-parse-completions-response
+  (stringp (parse-completions-response json)))
 
 ;; Parse models response JSON, extract list of model IDs
 ;; Input: json response string from /v1/models (OpenAI format)
@@ -313,6 +342,89 @@
 (defthm state-p1-of-llm-chat-completion-with-provider
   (implies (state-p1 state)
            (state-p1 (mv-nth 2 (llm-chat-completion-with-provider config messages state)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Completions API (for Codex models)
+;;
+;; Codex models use /v1/completions endpoint with prompt instead of messages.
+;; This function converts chat messages to a prompt and calls completions API.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defconst *default-max-tokens* 2048)
+
+;; Call LLM completions API with provider configuration (for Codex models)
+;;
+;; Parameters:
+;;   config     - LLM provider configuration (endpoint will be modified to /completions)
+;;   messages   - Conversation history as chat-message-list (converted to prompt)
+;;   max-tokens - Maximum tokens to generate (default 2048)
+;;   state      - ACL2 state
+;;
+;; Returns: (mv error response state)
+;;   error    - NIL on success, error string on failure
+;;   response - Generated text (stringp, empty on error)
+;;   state    - Updated state
+(defun llm-completions-with-provider (config messages max-tokens state)
+  (declare (xargs :guard (and (llm-provider-config-p config)
+                              (chat-message-list-p messages)
+                              (natp max-tokens))
+                  :stobjs state
+                  :guard-hints (("Goal" :in-theory (disable post-json)))))
+  (b* (;; Get model from config, use completions endpoint
+       (model (llm-provider-config->model config))
+       
+       ;; Use the completions endpoint
+       (endpoint *openai-completions-endpoint*)
+       
+       ;; Validate config
+       ((when (equal model ""))
+        (mv "Provider config missing model" "" state))
+       ((when (and (provider-requires-api-key-p config)
+                   (equal (llm-provider-config->api-key config) "")))
+        (mv "Provider requires API key but none configured" "" state))
+       
+       ;; Serialize the request to JSON (converts messages to prompt)
+       (request-json (serialize-completions-request model messages max-tokens))
+       
+       ;; Build headers with auth if needed
+       (headers (make-provider-headers config))
+       
+       ;; Make HTTP POST request
+       ((mv err response-body status-raw state)
+        (post-json endpoint
+                   request-json
+                   headers
+                   *llm-connect-timeout*
+                   *llm-read-timeout*
+                   state))
+       
+       ;; Coerce status to natp
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err "" state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string)
+                        " - " response-body)
+            ""
+            state))
+       
+       ;; Parse the response JSON to extract generated text
+       (content (parse-completions-response response-body)))
+    
+    (mv nil content state)))
+
+;; Return type theorems for llm-completions-with-provider
+(defthm stringp-of-llm-completions-with-provider-response
+  (stringp (mv-nth 1 (llm-completions-with-provider config messages max-tokens state))))
+
+(defthm state-p1-of-llm-completions-with-provider
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-completions-with-provider config messages max-tokens state)))))
 
 ;; List available models from LLM server
 ;;

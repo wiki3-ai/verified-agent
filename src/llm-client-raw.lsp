@@ -81,6 +81,34 @@
           (serialize-chat-messages messages)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Completions API Serialization (for Codex models)
+;;
+;; Codex models use /v1/completions with a prompt string instead of messages.
+;; Request format: {"model":"...", "prompt":"...", "max_tokens":...}
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun messages-to-prompt (messages)
+  "Convert chat messages to a single prompt string for completions API.
+   Format: System message as context, then alternating User/Assistant."
+  (with-output-to-string (out)
+    (loop for msg in messages
+          for role = (car (car msg))
+          for content = (cadr msg)
+          do (case role
+               (:system (format out "~A~%~%" content))
+               (:user (format out "User: ~A~%" content))
+               (:assistant (format out "Assistant: ~A~%" content))
+               (:tool (format out "Tool Result: ~A~%" content))))
+    (format out "Assistant:")))
+
+(defun serialize-completions-request (model messages max-tokens)
+  "Serialize a completions request to JSON string."
+  (format nil "{\"model\":\"~A\",\"prompt\":\"~A\",\"max_tokens\":~D,\"stop\":[\"User:\",\"\\n\\nUser\"]}"
+          (json-escape-string model)
+          (json-escape-string (messages-to-prompt messages))
+          max-tokens))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; JSON Response Parsing (using Kestrel json-parser)
 ;;
 ;; OpenAI response format:
@@ -136,6 +164,53 @@
     (if err
         ""
         (or (extract-chat-content parsed) ""))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Completions API Response Parsing (for Codex models)
+;;
+;; Completions response format:
+;; {
+;;   "choices": [
+;;     {
+;;       "text": "response text here",
+;;       "index": 0,
+;;       "finish_reason": "stop"
+;;     }
+;;   ]
+;; }
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun extract-completions-text (parsed)
+  "Extract text from parsed completions response structure."
+  (and (consp parsed)
+       (eq (car parsed) :object)
+       (consp (cdr parsed))
+       (let* ((pairs (cadr parsed))
+              (choices-entry (assoc "choices" pairs :test #'equal)))
+         (and choices-entry
+              (consp (cdr choices-entry))
+              (eq (cadr choices-entry) :array)
+              (consp (cddr choices-entry))
+              (consp (caddr choices-entry))
+              (let ((first-choice (car (caddr choices-entry))))
+                (and (consp first-choice)
+                     (eq (car first-choice) :object)
+                     (consp (cdr first-choice))
+                     (let* ((choice-pairs (cadr first-choice))
+                            (text-entry (assoc "text" choice-pairs :test #'equal)))
+                       (and text-entry
+                            (stringp (cdr text-entry))
+                            (cdr text-entry)))))))))
+
+(defun parse-completions-response (json)
+  "Parse OpenAI completions response, extract generated text.
+   Uses Kestrel json-parser for robust JSON handling.
+   Returns the text string, or empty string on parse failure."
+  (multiple-value-bind (err parsed)
+      (parse-string-as-json json)
+    (if err
+        ""
+        (or (extract-completions-text parsed) ""))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Models List Parsing

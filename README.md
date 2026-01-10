@@ -123,14 +123,13 @@ Start LM Studio with a model loaded, then in ACL2:
 You can use OpenAI instead of a local LLM:
 
 ```lisp
-(ld "chat-lib.lisp")
+(ld "chat-openai.lisp")
 
-;; Create OpenAI provider config with your API key
-(defconst *openai-config*
-  (make-openai-provider-config "sk-your-api-key-here" "gpt-4o-mini"))
+;; Quick start with your API key
+(chat-with-openai "sk-your-api-key-here" state)
 
-;; Run interactive chat with OpenAI
-(interactive-chat-loop-with-provider *initial-chat-state* *openai-config* state)
+;; Or use GPT-4o for best results
+(chat-with-gpt4o "sk-your-api-key-here" state)
 ```
 
 Available models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `gpt-3.5-turbo`, etc.
@@ -178,7 +177,8 @@ verified-agent/
 │   ├── mcp-client-raw.lsp      # Raw Lisp MCP serialization
 │   ├── agent-runner.lisp       # Runtime driver for code execution
 │   ├── parinfer-fixer.lisp     # Fix unbalanced parens in LLM output
-│   ├── chat-demo.lisp          # Interactive demo
+│   ├── chat-demo.lisp          # Interactive demo (local LLM)
+│   ├── chat-openai.lisp        # Interactive demo (OpenAI cloud)
 │   └── Verified_Agent_Spec.md  # Full specification
 ├── acl2-mcp/                   # Python MCP server
 │   ├── acl2_mcp/

@@ -289,6 +289,55 @@ Be concise. Show your reasoning.")
     (react-loop-with-provider st-with-user provider-config mcp-conn 5 state)))
 
 ;;;============================================================================
+;;; Completions API ReAct Loop (for Codex models)
+;;;============================================================================
+
+;; Completions-aware ReAct loop for models like Codex that use /v1/completions
+(defun react-loop-with-completions (agent-st provider-config mcp-conn max-steps max-tokens state)
+  "Execute ReAct loop using completions API: LLM -> extract code -> execute -> repeat.
+   For Codex and other models that use /v1/completions instead of chat API."
+  (declare (xargs :mode :program :stobjs state))
+  (if (zp max-steps)
+      (prog2$ (cw "~%[Max steps reached]~%")
+              (mv agent-st state))
+    (mv-let (err response state)
+      (llm-completions-with-provider provider-config (get-messages agent-st) max-tokens state)
+      (if err
+          (prog2$ (cw "~%LLM Error: ~s0~%" err)
+                  (mv agent-st state))
+        (let ((agent-st (add-assistant-msg response agent-st)))
+          (prog2$ (cw "~%Assistant: ~s0~%" response)
+            (mv-let (found? code)
+              (extract-code-block response)
+              (if (not found?)
+                  ;; No code block - done with this turn
+                  (mv agent-st state)
+                ;; Execute code and continue
+                (prog2$ (cw "~%[Executing: ~s0]~%" code)
+                  (mv-let (exec-err result state)
+                    (execute-acl2-code code mcp-conn state)
+                    (let* ((tool-result (if exec-err
+                                            (concatenate 'string "Error: " exec-err)
+                                          result))
+                           ;; Truncate long results for display
+                           (display-result (if (> (length tool-result) 300)
+                                               (concatenate 'string 
+                                                 (subseq tool-result 0 300) "...")
+                                             tool-result))
+                           (agent-st (add-tool-result tool-result agent-st)))
+                      (prog2$ (cw "~%Result: ~s0~%" display-result)
+                        ;; Continue ReAct loop
+                        (react-loop-with-completions agent-st provider-config mcp-conn 
+                                                     (1- max-steps) max-tokens state)))))))))))))
+
+;; Completions-aware chat turn
+(defun chat-turn-with-completions (user-msg agent-st provider-config mcp-conn max-tokens state)
+  "Execute one chat turn with completions API: add user message, run ReAct loop"
+  (declare (xargs :mode :program :stobjs state))
+  (let ((st-with-user (add-user-msg user-msg agent-st)))
+    (react-loop-with-completions st-with-user provider-config mcp-conn 5 max-tokens state)))
+
+;;;============================================================================
 ;;; Input Reading
 ;;;============================================================================
 
@@ -403,6 +452,59 @@ Be concise. Show your reasoning.")
                                 (cw "Warning: No persistent ACL2 session (slower mode).~%"))
                         (interactive-chat-loop-with-provider-aux 
                          agent-st provider-config mcp-conn state)))))))))))))
+
+;; Completions-aware interactive chat loop helper (for Codex models)
+(defun interactive-chat-loop-with-completions-aux (agent-st provider-config max-tokens mcp-conn state)
+  "Helper for interactive chat loop with completions API and code execution."
+  (declare (xargs :mode :program :stobjs state))
+  (prog2$ (cw "~%You: ")
+    (mv-let (input state)
+      (read-line-from-user state)
+      (if (or (null input)
+              (equal input "/exit")
+              (equal input "/quit"))
+          (prog2$ (cw "~%Goodbye!~%")
+                  (mv agent-st state))
+        (mv-let (new-agent state)
+          (chat-turn-with-completions input agent-st provider-config mcp-conn max-tokens state)
+          (interactive-chat-loop-with-completions-aux new-agent provider-config max-tokens mcp-conn state))))))
+
+;; Completions-aware interactive chat loop (for Codex models)
+(defun interactive-chat-loop-with-completions (agent-st provider-config max-tokens state)
+  "Run an interactive ReAct chat loop using completions API (for Codex models).
+   Type /exit to quit.
+   
+   Example usage with OpenAI Codex:
+     (interactive-chat-loop-with-completions
+       *initial-chat-state*
+       (make-openai-provider-config \"sk-...\" \"gpt-5.1-codex\")
+       2048  ; max tokens
+       state)"
+  (declare (xargs :mode :program :stobjs state))
+  (let ((provider-name (llm-provider-to-string 
+                        (llm-provider-config->provider provider-config)))
+        (model-name (llm-provider-config->model provider-config)))
+    (prog2$ (cw "~%========================================~%")
+      (prog2$ (cw "Interactive ReAct Chat with ~s0 (Completions API)~%" (string-upcase provider-name))
+        (prog2$ (cw "Model: ~s0~%" model-name)
+          (prog2$ (cw "Max tokens: ~x0~%" max-tokens)
+            (prog2$ (cw "(type /exit to quit)~%")
+              (prog2$ (cw "========================================~%")
+                (prog2$ (cw "~%Connecting to MCP server...~%")
+                  (mv-let (mcp-err mcp-conn state)
+                    (mcp-connect *mcp-default-endpoint* state)
+                    (if mcp-err
+                        (prog2$ (cw "MCP connection failed: ~s0~%" mcp-err)
+                          (prog2$ (cw "Code execution disabled.~%")
+                            (interactive-chat-loop-with-completions-aux 
+                             agent-st provider-config max-tokens nil state)))
+                      (prog2$ (cw "MCP connected.~%")
+                        (prog2$ (if (mcp-connection-has-acl2-session-p mcp-conn)
+                                    (cw "ACL2 session: ~s0~%" 
+                                        (mcp-connection->acl2-session-id mcp-conn))
+                                  (cw "Warning: No persistent ACL2 session (slower mode).~%"))
+                          (interactive-chat-loop-with-completions-aux 
+                           agent-st provider-config max-tokens mcp-conn state))))))))))))))
 
 ;;;============================================================================
 ;;; Session State Setup
