@@ -58,6 +58,51 @@ Be concise. Show your reasoning.")
     :satisfaction 0))          ; Starting satisfaction
 
 ;;;============================================================================
+;;; Provider Configuration Helpers
+;;;============================================================================
+
+;; Create OpenAI provider config from environment variable or parameter
+(defun make-openai-provider-config (api-key model)
+  "Create OpenAI provider configuration.
+   API-KEY: Your OpenAI API key
+   MODEL: Model name (e.g., \"gpt-4o-mini\", \"gpt-4o\", \"gpt-4-turbo\")"
+  (declare (xargs :guard (and (stringp api-key) (stringp model))))
+  (make-llm-provider-config
+   :provider (llm-provider-openai)
+   :endpoint "https://api.openai.com/v1/chat/completions"
+   :api-key api-key
+   :model model
+   :org-id ""))
+
+;; Create local LM Studio provider config
+(defun make-local-provider-config (model)
+  "Create local LM Studio provider configuration.
+   MODEL: Model identifier from LM Studio"
+  (declare (xargs :guard (stringp model)))
+  (make-llm-provider-config
+   :provider (llm-provider-local)
+   :endpoint "http://host.docker.internal:1234/v1/chat/completions"
+   :api-key ""
+   :model model
+   :org-id ""))
+
+;; Create custom OpenAI-compatible provider config
+(defun make-custom-provider-config (endpoint api-key model)
+  "Create custom OpenAI-compatible provider configuration.
+   ENDPOINT: API endpoint URL
+   API-KEY: API key (empty string if not needed)
+   MODEL: Model identifier"
+  (declare (xargs :guard (and (stringp endpoint) 
+                              (stringp api-key) 
+                              (stringp model))))
+  (make-llm-provider-config
+   :provider (llm-provider-custom)
+   :endpoint endpoint
+   :api-key api-key
+   :model model
+   :org-id ""))
+
+;;;============================================================================
 ;;; Display Helpers
 ;;;============================================================================
 
@@ -193,11 +238,55 @@ Be concise. Show your reasoning.")
                         ;; Continue ReAct loop
                         (react-loop agent-st model-id mcp-conn (1- max-steps) state)))))))))))))
 
+;; Provider-aware ReAct loop
+(defun react-loop-with-provider (agent-st provider-config mcp-conn max-steps state)
+  "Execute ReAct loop using provider config: LLM -> extract code -> execute -> repeat"
+  (declare (xargs :mode :program :stobjs state))
+  (if (zp max-steps)
+      (prog2$ (cw "~%[Max steps reached]~%")
+              (mv agent-st state))
+    (mv-let (err response state)
+      (llm-chat-completion-with-provider provider-config (get-messages agent-st) state)
+      (if err
+          (prog2$ (cw "~%LLM Error: ~s0~%" err)
+                  (mv agent-st state))
+        (let ((agent-st (add-assistant-msg response agent-st)))
+          (prog2$ (cw "~%Assistant: ~s0~%" response)
+            (mv-let (found? code)
+              (extract-code-block response)
+              (if (not found?)
+                  ;; No code block - done with this turn
+                  (mv agent-st state)
+                ;; Execute code and continue
+                (prog2$ (cw "~%[Executing: ~s0]~%" code)
+                  (mv-let (exec-err result state)
+                    (execute-acl2-code code mcp-conn state)
+                    (let* ((tool-result (if exec-err
+                                            (concatenate 'string "Error: " exec-err)
+                                          result))
+                           ;; Truncate long results for display
+                           (display-result (if (> (length tool-result) 300)
+                                               (concatenate 'string 
+                                                 (subseq tool-result 0 300) "...")
+                                             tool-result))
+                           (agent-st (add-tool-result tool-result agent-st)))
+                      (prog2$ (cw "~%Result: ~s0~%" display-result)
+                        ;; Continue ReAct loop
+                        (react-loop-with-provider agent-st provider-config mcp-conn 
+                                                  (1- max-steps) state)))))))))))))
+
 (defun chat-turn (user-msg agent-st model-id mcp-conn state)
   "Execute one chat turn with ReAct: add user message, run ReAct loop"
   (declare (xargs :mode :program :stobjs state))
   (let ((st-with-user (add-user-msg user-msg agent-st)))
     (react-loop st-with-user model-id mcp-conn 5 state)))
+
+;; Provider-aware chat turn
+(defun chat-turn-with-provider (user-msg agent-st provider-config mcp-conn state)
+  "Execute one chat turn with provider config: add user message, run ReAct loop"
+  (declare (xargs :mode :program :stobjs state))
+  (let ((st-with-user (add-user-msg user-msg agent-st)))
+    (react-loop-with-provider st-with-user provider-config mcp-conn 5 state)))
 
 ;;;============================================================================
 ;;; Input Reading
@@ -238,6 +327,22 @@ Be concise. Show your reasoning.")
           (chat-turn input agent-st model-id mcp-conn state)
           (interactive-chat-loop-aux new-agent model-id mcp-conn state))))))
 
+;; Provider-aware interactive chat loop helper
+(defun interactive-chat-loop-with-provider-aux (agent-st provider-config mcp-conn state)
+  "Helper for interactive chat loop with provider config and code execution."
+  (declare (xargs :mode :program :stobjs state))
+  (prog2$ (cw "~%You: ")
+    (mv-let (input state)
+      (read-line-from-user state)
+      (if (or (null input)
+              (equal input "/exit")
+              (equal input "/quit"))
+          (prog2$ (cw "~%Goodbye!~%")
+                  (mv agent-st state))
+        (mv-let (new-agent state)
+          (chat-turn-with-provider input agent-st provider-config mcp-conn state)
+          (interactive-chat-loop-with-provider-aux new-agent provider-config mcp-conn state))))))
+
 (defun interactive-chat-loop (agent-st model-id state)
   "Run an interactive ReAct chat loop with code execution. Type /exit to quit."
   (declare (xargs :mode :program :stobjs state))
@@ -258,6 +363,46 @@ Be concise. Show your reasoning.")
                                   (mcp-connection->acl2-session-id mcp-conn))
                             (cw "Warning: No persistent ACL2 session (slower mode).~%"))
                     (interactive-chat-loop-aux agent-st model-id mcp-conn state)))))))))))
+
+;; Provider-aware interactive chat loop
+(defun interactive-chat-loop-with-provider (agent-st provider-config state)
+  "Run an interactive ReAct chat loop with cloud/local provider. Type /exit to quit.
+   
+   Example usage with OpenAI:
+     (interactive-chat-loop-with-provider 
+       *initial-chat-state*
+       (make-openai-provider-config \"sk-...\" \"gpt-4o-mini\")
+       state)
+   
+   Example usage with local LM Studio:
+     (interactive-chat-loop-with-provider 
+       *initial-chat-state*
+       (make-local-provider-config \"qwen2.5-coder-7b\")
+       state)"
+  (declare (xargs :mode :program :stobjs state))
+  (let ((provider-name (llm-provider-to-string 
+                        (llm-provider-config->provider provider-config)))
+        (model-name (llm-provider-config->model provider-config)))
+    (prog2$ (cw "~%========================================~%")
+      (prog2$ (cw "Interactive ReAct Chat with ~s0~%" (string-upcase provider-name))
+        (prog2$ (cw "Model: ~s0~%" model-name)
+          (prog2$ (cw "(type /exit to quit)~%")
+            (prog2$ (cw "========================================~%")
+              (prog2$ (cw "~%Connecting to MCP server...~%")
+                (mv-let (mcp-err mcp-conn state)
+                  (mcp-connect *mcp-default-endpoint* state)
+                  (if mcp-err
+                      (prog2$ (cw "MCP connection failed: ~s0~%" mcp-err)
+                        (prog2$ (cw "Code execution disabled.~%")
+                          (interactive-chat-loop-with-provider-aux 
+                           agent-st provider-config nil state)))
+                    (prog2$ (cw "MCP connected.~%")
+                      (prog2$ (if (mcp-connection-has-acl2-session-p mcp-conn)
+                                  (cw "ACL2 session: ~s0~%" 
+                                      (mcp-connection->acl2-session-id mcp-conn))
+                                (cw "Warning: No persistent ACL2 session (slower mode).~%"))
+                        (interactive-chat-loop-with-provider-aux 
+                         agent-st provider-config mcp-conn state)))))))))))))
 
 ;;;============================================================================
 ;;; Session State Setup

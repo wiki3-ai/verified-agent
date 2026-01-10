@@ -24,6 +24,7 @@
 ;; Configuration
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; LM Studio (local) endpoints
 (defconst *lm-studio-endpoint* 
   "http://host.docker.internal:1234/v1/chat/completions")
 
@@ -35,8 +36,24 @@
 (defconst *lm-studio-v0-models-endpoint*
   "http://host.docker.internal:1234/api/v0/models")
 
+;; OpenAI cloud endpoints
+(defconst *openai-endpoint*
+  "https://api.openai.com/v1/chat/completions")
+
+(defconst *openai-models-endpoint*
+  "https://api.openai.com/v1/models")
+
 (defconst *llm-connect-timeout* 30)   ; seconds
 (defconst *llm-read-timeout* 120)     ; seconds (higher for slow local models)
+
+;; Default provider configs (for convenience)
+(defconst *local-provider-config*
+  (make-llm-provider-config
+   :provider (llm-provider-local)
+   :endpoint *lm-studio-endpoint*
+   :api-key ""
+   :model ""
+   :org-id ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; JSON Serialization Helpers
@@ -192,6 +209,110 @@
 (defthm state-p1-of-llm-chat-completion
   (implies (state-p1 state)
            (state-p1 (mv-nth 2 (llm-chat-completion model messages state)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Provider-Aware Chat Completion
+;;
+;; Use a provider configuration to call the appropriate LLM API.
+;; Supports local (LM Studio), OpenAI, and custom OpenAI-compatible endpoints.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Build headers for provider (adds Authorization for cloud providers)
+(defun make-provider-headers (config)
+  (declare (xargs :guard (llm-provider-config-p config)))
+  (let* ((api-key (llm-provider-config->api-key config))
+         (org-id (llm-provider-config->org-id config))
+         (base-headers '(("Content-Type" . "application/json")
+                        ("Accept" . "application/json"))))
+    (cond
+     ;; No API key needed (local)
+     ((equal api-key "")
+      base-headers)
+     ;; Has API key - add Authorization header
+     (t
+      (let ((auth-headers 
+             (cons (cons "Authorization" 
+                        (concatenate 'string "Bearer " api-key))
+                   base-headers)))
+        ;; Add org header if present
+        (if (equal org-id "")
+            auth-headers
+          (cons (cons "OpenAI-Organization" org-id)
+                auth-headers)))))))
+
+(defthm alistp-of-make-provider-headers
+  (alistp (make-provider-headers config)))
+
+;; Call LLM chat completion API with provider configuration
+;;
+;; Parameters:
+;;   config   - LLM provider configuration
+;;   messages - Conversation history as chat-message-list
+;;   state    - ACL2 state
+;;
+;; Returns: (mv error response state)
+;;   error    - NIL on success, error string on failure
+;;   response - Assistant's response content (stringp, empty on error)
+;;   state    - Updated state
+(defun llm-chat-completion-with-provider (config messages state)
+  (declare (xargs :guard (and (llm-provider-config-p config)
+                              (chat-message-list-p messages))
+                  :stobjs state
+                  :guard-hints (("Goal" :in-theory (disable post-json)))))
+  (b* (;; Get endpoint and model from config
+       (endpoint (llm-provider-config->endpoint config))
+       (model (llm-provider-config->model config))
+       
+       ;; Validate config
+       ((when (equal endpoint ""))
+        (mv "Provider config missing endpoint" "" state))
+       ((when (equal model ""))
+        (mv "Provider config missing model" "" state))
+       ((when (and (provider-requires-api-key-p config)
+                   (equal (llm-provider-config->api-key config) "")))
+        (mv "Provider requires API key but none configured" "" state))
+       
+       ;; Serialize the request to JSON
+       (request-json (serialize-chat-request model messages))
+       
+       ;; Build headers with auth if needed
+       (headers (make-provider-headers config))
+       
+       ;; Make HTTP POST request
+       ((mv err response-body status-raw state)
+        (post-json endpoint
+                   request-json
+                   headers
+                   *llm-connect-timeout*
+                   *llm-read-timeout*
+                   state))
+       
+       ;; Coerce status to natp
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err "" state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string))
+            ""
+            state))
+       
+       ;; Parse the response JSON to extract assistant content
+       (content (parse-chat-response response-body)))
+    
+    (mv nil content state)))
+
+;; Return type theorems for llm-chat-completion-with-provider
+(defthm stringp-of-llm-chat-completion-with-provider-response
+  (stringp (mv-nth 1 (llm-chat-completion-with-provider config messages state))))
+
+(defthm state-p1-of-llm-chat-completion-with-provider
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-chat-completion-with-provider config messages state)))))
 
 ;; List available models from LLM server
 ;;
