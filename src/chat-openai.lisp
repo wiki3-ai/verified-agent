@@ -1,6 +1,6 @@
 ; Chat OpenAI - Interactive Demo with OpenAI Cloud Provider
 ; =========================================================
-; This file demonstrates using OpenAI's Codex API instead of a local LLM.
+; This file demonstrates using OpenAI's API instead of a local LLM.
 ;
 ; Prerequisites:
 ;   1. Set OPENAI_API_KEY environment variable
@@ -26,11 +26,7 @@
 ;;; OpenAI Configuration (uses OPENAI_API_KEY env var)
 ;;;============================================================================
 
-;; Using OpenAI Codex model (uses completions API, not chat API)
-(defconst *openai-model* "gpt-5.1-codex")
-
-;; Max tokens for completions API
-(defconst *codex-max-tokens* 2048)
+(defconst *openai-model* "gpt-5.2")
 
 (make-event
  (mv-let (erp api-key state)
@@ -46,17 +42,15 @@
 ;;;============================================================================
 
 (defun chat-openai (state)
-  "Start an interactive chat session with OpenAI Codex.
-   Uses OPENAI_API_KEY environment variable for authentication.
-   Uses the completions API (/v1/completions) since Codex is not a chat model."
+  "Start an interactive chat session with OpenAI gpt-5.2.
+   Uses OPENAI_API_KEY environment variable for authentication."
   (declare (xargs :mode :program :stobjs state))
-  (interactive-chat-loop-with-completions *initial-chat-state* *openai-config* 
-                                          *codex-max-tokens* state))
+  (interactive-chat-loop-with-provider *initial-chat-state* *openai-config* state))
 
 ;;;============================================================================
 ;;; Usage Instructions
 ;;;============================================================================
 
 (value-triple 
- (cw "~%OpenAI Codex Chat loaded (model: ~s0)~%Run: (chat-openai state)~%~%" 
+ (cw "~%OpenAI Chat loaded (model: ~s0)~%Run: (chat-openai state)~%~%" 
      *openai-model*))

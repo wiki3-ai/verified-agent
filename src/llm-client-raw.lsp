@@ -57,11 +57,14 @@
          (content (cadr msg))
          ;; Extract role string from FTY tagsum
          ;; chat-role is (:system), (:user), (:assistant), or (:tool)
+         ;; NOTE: Tool results are sent as "user" role because OpenAI's API
+         ;; requires tool results to follow a specific tool_calls flow.
+         ;; Sending as "user" works with both local LLMs and OpenAI.
          (role-str (case (car role)
                      (:system "system")
                      (:user "user")
                      (:assistant "assistant")
-                     (:tool "tool")
+                     (:tool "user")  ; Tool results as user messages for OpenAI compat
                      (otherwise "user"))))
     (format nil "{\"role\":\"~A\",\"content\":\"~A\"}"
             role-str
