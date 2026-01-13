@@ -26,7 +26,8 @@
 ;;; OpenAI Configuration (uses OPENAI_API_KEY env var)
 ;;;============================================================================
 
-(defconst *openai-model* "gpt-5.2")
+; (defconst *openai-model* "gpt-5.2")
+(defconst *openai-model* "gpt-5-mini")
 
 (make-event
  (mv-let (erp api-key state)
