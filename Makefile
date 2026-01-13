@@ -14,10 +14,10 @@ LISP_FILES := $(wildcard src/*.lisp)
 NOTEBOOKS := $(LISP_FILES:.lisp=.ipynb)
 
 # Default target: certify all books
-all: certify-all
+all: certify
 
 # Certify ACL2 books
-certify-all: certify-community-books certify-src 
+certify: certify-community-books certify-src 
 
 # Full certification including runtime
 certify-src:
@@ -234,10 +234,11 @@ cargo-run:
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  all                   - Certify main ACL2 books (default)"
-	@echo "  certify               - Certify verified-agent.lisp"
+	@echo "  all                   - Same as certify-all"
+	@echo "  certify               - Same as certify-all"
 	@echo "  certify-all           - Certify all books including runtime"
-	@echo "  certify-community-books - Certify all required ACL2 community books"
+	@echo "  certify-src           - Certify books in src/ directory"
+	@echo "  certify-community-books - certify-src and certify-community-books"
 	@echo "  check-community-books - Check which community books are certified"
 	@echo "  notebooks             - Generate Jupyter notebooks from .lisp files"
 	@echo "  clean                 - Remove certification artifacts"
