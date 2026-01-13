@@ -235,9 +235,9 @@ cargo-run:
 help:
 	@echo "Available targets:"
 	@echo "  all                   - Certify main ACL2 books (default)"
-	@echo "  cert                  - Certify verified-agent.lisp"
-	@echo "  cert-all              - Certify all books including runtime"
-	@echo "  cert-community-books  - Certify all required ACL2 community books"
+	@echo "  certify               - Certify verified-agent.lisp"
+	@echo "  certify-all           - Certify all books including runtime"
+	@echo "  certify-community-books - Certify all required ACL2 community books"
 	@echo "  check-community-books - Check which community books are certified"
 	@echo "  notebooks             - Generate Jupyter notebooks from .lisp files"
 	@echo "  clean                 - Remove certification artifacts"
