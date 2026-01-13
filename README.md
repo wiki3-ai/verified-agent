@@ -8,7 +8,7 @@ This project demonstrates how to build AI agents with **formally verified decisi
 
 - **Proven Safety**: ACL2 proves that the agent respects permissions, stays within budget, and terminates
 - **Proven Correctness**: State transitions preserve invariants; context management preserves system prompts
-- **Practical Integration**: Real LLM integration via LM Studio, code execution via MCP
+- **Practical Integration**: LLM integration via local (LM Studio) or cloud (OpenAI) providers, code execution via MCP
 
 ## Features
 
@@ -18,7 +18,8 @@ This project demonstrates how to build AI agents with **formally verified decisi
 - ✅ **Context management** with sliding window truncation that preserves system prompts
 - ✅ **Proven termination** via max-steps bound
 - ✅ **MCP integration** for ACL2 code execution with persistent sessions
-- ✅ **LLM integration** via LM Studio's OpenAI-compatible API
+- ✅ **LLM integration** via local (LM Studio) or cloud (OpenAI) providers
+- ✅ **Cloud provider support** with OpenAI, custom endpoints (Anthropic, Azure planned)
 - ✅ **Parinfer integration** to auto-fix unbalanced parens in LLM-generated code
 
 ## Proven Properties
@@ -83,7 +84,8 @@ All theorems are in [verified-agent.lisp](src/verified-agent.lisp) unless noted 
 
 - [VS Code](https://code.visualstudio.com/) with [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 - [Docker](https://www.docker.com/)
-- [LM Studio](https://lmstudio.ai/) (optional, for LLM integration)
+- [LM Studio](https://lmstudio.ai/) (optional, for local LLM)
+- [OpenAI API Key](https://platform.openai.com/api-keys) (optional, for cloud LLM)
 
 ### 1. Clone and Open in Dev Container
 
@@ -115,6 +117,22 @@ Start LM Studio with a model loaded, then in ACL2:
 (ld "chat-demo.lisp")
 (interactive-chat-loop *agent-v1* *model-id* state)
 ```
+
+### 4b. Alternative: Use OpenAI (Cloud Provider)
+
+You can use OpenAI instead of a local LLM:
+
+```lisp
+(ld "chat-openai.lisp")
+
+;; Quick start with your API key
+(chat-with-openai "sk-your-api-key-here" state)
+
+;; Or use GPT-4o for best results
+(chat-with-gpt4o "sk-your-api-key-here" state)
+```
+
+Available models: `gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `gpt-3.5-turbo`, etc.
 
 ## Architecture
 
@@ -159,7 +177,8 @@ verified-agent/
 │   ├── mcp-client-raw.lsp      # Raw Lisp MCP serialization
 │   ├── agent-runner.lisp       # Runtime driver for code execution
 │   ├── parinfer-fixer.lisp     # Fix unbalanced parens in LLM output
-│   ├── chat-demo.lisp          # Interactive demo
+│   ├── chat-demo.lisp          # Interactive demo (local LLM)
+│   ├── chat-openai.lisp        # Interactive demo (OpenAI cloud)
 │   └── Verified_Agent_Spec.md  # Full specification
 ├── acl2-mcp/                   # Python MCP server
 │   ├── acl2_mcp/
@@ -221,6 +240,41 @@ The agent can execute ACL2 code through the MCP protocol:
 
 ;; Agent extracts and executes via MCP
 (mcp-acl2-evaluate conn "(+ 1 2 3)")  ; => "6"
+```
+
+### LLM Providers
+
+The agent supports both local and cloud LLM providers:
+
+| Provider | Description | Setup |
+|----------|-------------|-------|
+| Local (LM Studio) | Run models locally on your machine | Install LM Studio, load a model |
+| OpenAI | Cloud-hosted GPT-4, GPT-3.5, etc. | Get API key from OpenAI |
+| Custom | Any OpenAI-compatible API | Provide endpoint URL |
+
+**Provider Configuration:**
+
+```lisp
+;; Local LM Studio (default)
+(make-local-provider-config "model-name")
+
+;; OpenAI
+(make-openai-provider-config "sk-..." "gpt-4o-mini")
+
+;; Custom OpenAI-compatible endpoint
+(make-custom-provider-config "https://my-api.com/v1/chat/completions" 
+                             "api-key" 
+                             "model-name")
+```
+
+**Using a provider:**
+
+```lisp
+;; Single chat completion
+(llm-chat-completion-with-provider config messages state)
+
+;; Interactive chat loop
+(interactive-chat-loop-with-provider agent-state config state)
 ```
 
 ### Parinfer: Fixing LLM Code Errors

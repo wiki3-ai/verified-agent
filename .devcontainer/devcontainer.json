@@ -12,7 +12,7 @@
     },
     "containerEnv": {
         "JUPYTER_PORT": "8888",
-        "RESTARTABLE": "yes"
+        "RESTARTABLE": "yes",
     },
     "remoteEnv": {
         "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",

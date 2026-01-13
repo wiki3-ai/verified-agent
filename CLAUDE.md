@@ -7,7 +7,7 @@ This is the ACL2 Verified Agent project - a formally verified ReAct agent in ACL
 ### What This Is
 - Formally verified AI agent decision logic in ACL2
 - Uses FTY types for clean type definitions
-- Integrates with LLMs via LM Studio
+- Integrates with LLMs via local (LM Studio) or cloud (OpenAI) providers
 - Executes code via MCP protocol
 - Auto-fixes LLM paren errors with parinfer
 
@@ -20,9 +20,27 @@ cd src && cert.pl verified-agent.lisp
 acl2
 (ld "chat-demo.lisp")
 
+# Run with OpenAI (cloud provider)
+acl2
+(ld "chat-lib.lisp")
+(defconst *openai-config* (make-openai-provider-config "sk-..." "gpt-4o-mini"))
+(interactive-chat-loop-with-provider *initial-chat-state* *openai-config* state)
+
 # Install parinfer for fixing LLM code
 make install-parinfer
 make test-parinfer
+```
+
+### LLM Provider Configuration
+```lisp
+;; Local (LM Studio)
+(make-local-provider-config "model-name")
+
+;; OpenAI
+(make-openai-provider-config "sk-..." "gpt-4o-mini")
+
+;; Custom OpenAI-compatible
+(make-custom-provider-config "https://api.example.com/v1/chat/completions" "api-key" "model")
 ```
 
 ### File Locations

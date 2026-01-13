@@ -249,3 +249,93 @@
   (declare (xargs :guard (model-info-list-p models)))
   (filter-loaded-models (filter-completions-models models)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LLM Provider
+;;
+;; Specifies which LLM provider to use: local (LM Studio) or cloud (OpenAI, etc.)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(fty::deftagsum llm-provider
+  (:local ())       ; Local LM Studio instance
+  (:openai ())      ; OpenAI API (gpt-4, gpt-3.5-turbo, etc.)
+  (:anthropic ())   ; Anthropic API (claude-3, etc.) - future
+  (:azure ())       ; Azure OpenAI - future
+  (:custom ()))     ; Custom OpenAI-compatible endpoint
+
+(define llm-provider-to-string ((p llm-provider-p))
+  :returns (s stringp)
+  (llm-provider-case p
+    :local "local"
+    :openai "openai"
+    :anthropic "anthropic"
+    :azure "azure"
+    :custom "custom"))
+
+(define string-to-llm-provider ((s stringp))
+  :returns (p llm-provider-p)
+  (cond ((equal s "local") (llm-provider-local))
+        ((equal s "openai") (llm-provider-openai))
+        ((equal s "anthropic") (llm-provider-anthropic))
+        ((equal s "azure") (llm-provider-azure))
+        ((equal s "custom") (llm-provider-custom))
+        ;; Default to local for unknown
+        (t (llm-provider-local))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; LLM Provider Config
+;;
+;; Configuration for an LLM provider including endpoint, API key, etc.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(fty::defprod llm-provider-config
+  ((provider llm-provider-p "Provider type")
+   (endpoint stringp "API endpoint URL" :default "")
+   (api-key stringp "API key (empty for local)" :default "")
+   (model stringp "Default model to use" :default "")
+   (org-id stringp "Organization ID (optional)" :default ""))
+  :layout :list)
+
+;; Predefined provider configurations
+(defmacro make-local-config (&key (model '""))
+  `(make-llm-provider-config
+    :provider (llm-provider-local)
+    :endpoint "http://host.docker.internal:1234/v1/chat/completions"
+    :api-key ""
+    :model ,model
+    :org-id ""))
+
+(defmacro make-openai-config (&key api-key (model '"gpt-4o-mini") (org-id '""))
+  `(make-llm-provider-config
+    :provider (llm-provider-openai)
+    :endpoint "https://api.openai.com/v1/chat/completions"
+    :api-key ,api-key
+    :model ,model
+    :org-id ,org-id))
+
+(defmacro make-custom-config (&key endpoint api-key model)
+  `(make-llm-provider-config
+    :provider (llm-provider-custom)
+    :endpoint ,endpoint
+    :api-key ,api-key
+    :model ,model
+    :org-id ""))
+
+;; Helper to check if provider requires API key
+(define provider-requires-api-key-p ((config llm-provider-config-p))
+  :returns (requires booleanp)
+  (let ((prov (llm-provider-config->provider config)))
+    (llm-provider-case prov
+      :local nil
+      :openai t
+      :anthropic t
+      :azure t
+      :custom t)))
+
+;; Helper to check if config is valid (has API key if needed)
+(define llm-config-valid-p ((config llm-provider-config-p))
+  :returns (valid booleanp)
+  (and (not (equal "" (llm-provider-config->endpoint config)))
+       (or (not (provider-requires-api-key-p config))
+           (not (equal "" (llm-provider-config->api-key config))))))
+
+

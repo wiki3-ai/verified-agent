@@ -100,6 +100,29 @@ verified-agent/
 | `parinfer-fixer.lisp` | Parinfer integration for fixing LLM code output |
 | `chat-demo.lisp` | Interactive ReAct demo with code execution |
 
+## LLM Provider Configuration
+
+The agent supports multiple LLM providers:
+
+```lisp
+;; Local (LM Studio - default)
+(make-local-provider-config "model-name")
+
+;; OpenAI (cloud)
+(make-openai-provider-config "sk-your-api-key" "gpt-4o-mini")
+
+;; Custom OpenAI-compatible endpoint
+(make-custom-provider-config "https://api.example.com/v1/chat/completions" "api-key" "model")
+
+;; Use provider in chat loop
+(interactive-chat-loop-with-provider *initial-chat-state* config state)
+
+;; Or single completion
+(llm-chat-completion-with-provider config messages state)
+```
+
+LLM calls go to configured provider (default: LM Studio on host `http://host.docker.internal:1234/v1`).
+
 ## Permission Model
 
 ```lisp
@@ -205,10 +228,6 @@ mcp-proxy acl2-mcp --transport streamablehttp --port 8000 --pass-environment
 (mcp-acl2-admit conn "(defun foo (x) x)")    ; test without saving
 (mcp-acl2-prove conn "(defthm ...)")         ; prove theorem
 ```
-
-## LM Studio Integration
-
-LLM calls go to LM Studio on host: `http://host.docker.internal:1234/v1`
 
 ## Parinfer Integration
 
