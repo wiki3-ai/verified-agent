@@ -106,6 +106,26 @@ Be concise. Show your reasoning.")
 ;;; Display Helpers
 ;;;============================================================================
 
+;; Print a string with proper Unicode handling using princ$
+;; ACL2's cw ~s directive doesn't handle multi-byte UTF-8 well
+(defun print-string (str state)
+  "Print a string with proper Unicode support."
+  (declare (xargs :mode :program :stobjs state))
+  (princ$ str *standard-co* state))
+
+(defun print-newline (state)
+  "Print a newline."
+  (declare (xargs :mode :program :stobjs state))
+  (newline *standard-co* state))
+
+(defun print-labeled (label str state)
+  "Print a labeled string with newline, handling Unicode properly."
+  (declare (xargs :mode :program :stobjs state))
+  (let ((state (print-newline state)))
+    (let ((state (print-string label state)))
+      (let ((state (print-string str state)))
+        (print-newline state)))))
+
 (defun show-messages (msgs)
   "Display a list of chat messages."
   (declare (xargs :mode :program))
@@ -251,7 +271,11 @@ Be concise. Show your reasoning.")
           (prog2$ (cw "~%LLM Error: ~s0~%" err)
                   (mv agent-st state))
         (let ((agent-st (add-assistant-msg response agent-st)))
-          (prog2$ (cw "~%Assistant: ~s0~%" response)
+          ;; Use princ$ for Unicode-safe output
+          (let* ((state (print-newline state))
+                 (state (print-string "Assistant: " state))
+                 (state (print-string response state))
+                 (state (print-newline state)))
             (mv-let (found? code)
               (extract-code-block response)
               (if (not found?)
