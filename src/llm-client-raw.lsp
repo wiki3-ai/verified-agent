@@ -46,6 +46,119 @@
              (t (write-char c out)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Unicode to ASCII Normalization
+;;
+;; ACL2's character model only supports char-codes 0-255. This function
+;; normalizes common Unicode characters to their ASCII equivalents so that
+;; LLM responses (which often contain smart quotes, em-dashes, etc.) can
+;; be processed in ACL2's logic mode.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defparameter *unicode-to-ascii-map*
+  '(;; Smart quotes -> ASCII quotes
+    (#x2018 . #\')      ; LEFT SINGLE QUOTATION MARK '
+    (#x2019 . #\')      ; RIGHT SINGLE QUOTATION MARK '
+    (#x201A . #\')      ; SINGLE LOW-9 QUOTATION MARK ‚
+    (#x201B . #\')      ; SINGLE HIGH-REVERSED-9 QUOTATION MARK ‛
+    (#x201C . #\")      ; LEFT DOUBLE QUOTATION MARK "
+    (#x201D . #\")      ; RIGHT DOUBLE QUOTATION MARK "
+    (#x201E . #\")      ; DOUBLE LOW-9 QUOTATION MARK „
+    (#x201F . #\")      ; DOUBLE HIGH-REVERSED-9 QUOTATION MARK ‟
+    (#x2032 . #\')      ; PRIME ′
+    (#x2033 . #\")      ; DOUBLE PRIME ″
+    (#x2039 . #\<)      ; SINGLE LEFT-POINTING ANGLE QUOTATION MARK ‹
+    (#x203A . #\>)      ; SINGLE RIGHT-POINTING ANGLE QUOTATION MARK ›
+    (#x00AB . #\")      ; LEFT-POINTING DOUBLE ANGLE QUOTATION MARK «
+    (#x00BB . #\")      ; RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK »
+    ;; Dashes -> ASCII hyphen/minus
+    (#x2010 . #\-)      ; HYPHEN ‐
+    (#x2011 . #\-)      ; NON-BREAKING HYPHEN ‑
+    (#x2012 . #\-)      ; FIGURE DASH ‒
+    (#x2013 . #\-)      ; EN DASH –
+    (#x2014 . #\-)      ; EM DASH —
+    (#x2015 . #\-)      ; HORIZONTAL BAR ―
+    (#x2212 . #\-)      ; MINUS SIGN −
+    ;; Spaces -> ASCII space
+    (#x00A0 . #\Space)  ; NO-BREAK SPACE
+    (#x2000 . #\Space)  ; EN QUAD
+    (#x2001 . #\Space)  ; EM QUAD
+    (#x2002 . #\Space)  ; EN SPACE
+    (#x2003 . #\Space)  ; EM SPACE
+    (#x2004 . #\Space)  ; THREE-PER-EM SPACE
+    (#x2005 . #\Space)  ; FOUR-PER-EM SPACE
+    (#x2006 . #\Space)  ; SIX-PER-EM SPACE
+    (#x2007 . #\Space)  ; FIGURE SPACE
+    (#x2008 . #\Space)  ; PUNCTUATION SPACE
+    (#x2009 . #\Space)  ; THIN SPACE
+    (#x200A . #\Space)  ; HAIR SPACE
+    (#x200B . #\Space)  ; ZERO WIDTH SPACE (map to space, not nothing)
+    (#x202F . #\Space)  ; NARROW NO-BREAK SPACE
+    (#x205F . #\Space)  ; MEDIUM MATHEMATICAL SPACE
+    (#x3000 . #\Space)  ; IDEOGRAPHIC SPACE
+    ;; Ellipsis
+    (#x2026 . #\.)      ; HORIZONTAL ELLIPSIS … (becomes single dot, could be "...")
+    ;; Bullets
+    (#x2022 . #\*)      ; BULLET •
+    (#x2023 . #\>)      ; TRIANGULAR BULLET ‣
+    (#x2043 . #\-)      ; HYPHEN BULLET ⁃
+    ;; Arrows (common in LLM output)
+    (#x2190 . #\<)      ; LEFTWARDS ARROW ←
+    (#x2192 . #\>)      ; RIGHTWARDS ARROW →
+    (#x2194 . #\-)      ; LEFT RIGHT ARROW ↔
+    (#x21D0 . #\<)      ; LEFTWARDS DOUBLE ARROW ⇐
+    (#x21D2 . #\>)      ; RIGHTWARDS DOUBLE ARROW ⇒
+    (#x21D4 . #\=)      ; LEFT RIGHT DOUBLE ARROW ⇔
+    ;; Math symbols
+    (#x00D7 . #\x)      ; MULTIPLICATION SIGN ×
+    (#x00F7 . #\/)      ; DIVISION SIGN ÷
+    (#x2260 . #\!)      ; NOT EQUAL TO ≠ (use ! as approximation)
+    (#x2264 . #\<)      ; LESS-THAN OR EQUAL TO ≤
+    (#x2265 . #\>)      ; GREATER-THAN OR EQUAL TO ≥
+    (#x221E . #\8)      ; INFINITY ∞ (sideways 8)
+    ;; Check marks and X marks
+    (#x2713 . #\+)      ; CHECK MARK ✓
+    (#x2714 . #\+)      ; HEAVY CHECK MARK ✔
+    (#x2715 . #\x)      ; MULTIPLICATION X ✕
+    (#x2716 . #\x)      ; HEAVY MULTIPLICATION X ✖
+    (#x2717 . #\x)      ; BALLOT X ✗
+    (#x2718 . #\x)      ; HEAVY BALLOT X ✘
+    ;; Common currency
+    (#x20AC . #\E)      ; EURO SIGN €
+    (#x00A3 . #\L)      ; POUND SIGN £
+    (#x00A5 . #\Y)      ; YEN SIGN ¥
+    ;; Copyright/trademark
+    (#x00A9 . #\C)      ; COPYRIGHT SIGN ©
+    (#x00AE . #\R)      ; REGISTERED SIGN ®
+    (#x2122 . #\T)      ; TRADE MARK SIGN ™
+    )
+  "Map of Unicode code points to ASCII character replacements.")
+
+(defun normalize-unicode-char (c)
+  "Normalize a Unicode character to ASCII. Returns the character unchanged
+   if it's already ASCII (0-127) or Latin-1 (128-255), or looks up a 
+   replacement in the map. Unknown chars > 255 become '?'."
+  (let ((code (char-code c)))
+    (cond
+      ;; ASCII and Latin-1 pass through unchanged
+      ((<= code 255) c)
+      ;; Look up in normalization map
+      (t (let ((entry (assoc code *unicode-to-ascii-map*)))
+           (if entry
+               (cdr entry)
+               ;; Unknown high Unicode -> ?
+               #\?))))))
+
+(defun normalize-unicode-string (s)
+  "Normalize a string containing Unicode characters to ASCII/Latin-1.
+   This allows strings from LLM responses to be used in ACL2's logic mode
+   which only supports char-codes 0-255."
+  (if (not (stringp s))
+      ""
+      (with-output-to-string (out)
+        (loop for c across s do
+          (write-char (normalize-unicode-char c) out)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; JSON Serialization
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -161,12 +274,13 @@
 (defun parse-chat-response (json)
   "Parse OpenAI chat completion response, extract assistant content.
    Uses Kestrel json-parser for robust JSON handling.
+   Normalizes Unicode characters to ASCII for ACL2 compatibility.
    Returns the content string, or empty string on parse failure."
   (multiple-value-bind (err parsed)
       (parse-string-as-json json)
     (if err
         ""
-        (or (extract-chat-content parsed) ""))))
+        (normalize-unicode-string (or (extract-chat-content parsed) "")))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Completions API Response Parsing (for Codex models)
@@ -208,12 +322,13 @@
 (defun parse-completions-response (json)
   "Parse OpenAI completions response, extract generated text.
    Uses Kestrel json-parser for robust JSON handling.
+   Normalizes Unicode characters to ASCII for ACL2 compatibility.
    Returns the text string, or empty string on parse failure."
   (multiple-value-bind (err parsed)
       (parse-string-as-json json)
     (if err
         ""
-        (or (extract-completions-text parsed) ""))))
+        (normalize-unicode-string (or (extract-completions-text parsed) "")))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Models List Parsing

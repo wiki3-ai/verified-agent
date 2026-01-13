@@ -167,6 +167,62 @@
   (model-info-list-p (parse-v0-models-response json)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Unicode Normalization
+;;
+;; ACL2's character model only supports char-codes 0-255. LLM responses often
+;; contain Unicode characters (smart quotes, em-dashes, etc.) with codes > 255.
+;; This function normalizes them to ASCII equivalents.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Normalize Unicode characters in a string to ASCII/Latin-1
+;; Input: any string (may contain Unicode chars > 255)
+;; Output: string with all chars having char-code <= 255
+;; Common mappings:
+;;   - Smart quotes (U+2018-201F) -> ASCII ' or "
+;;   - Dashes (U+2010-2015, U+2212) -> ASCII -
+;;   - Bullets (U+2022) -> ASCII *
+;;   - Arrows (U+2192) -> ASCII >
+;;   - Unknown chars > 255 -> ?
+(defun normalize-unicode-string (s)
+  (declare (xargs :guard (stringp s))
+           (ignore s))
+  (prog2$ (er hard? 'normalize-unicode-string "Raw Lisp definition not installed?")
+          ""))
+
+(defthm stringp-of-normalize-unicode-string
+  (stringp (normalize-unicode-string s)))
+
+;; Helper: check if all characters in list have char-code <= 255
+(defun acl2-safe-chars-p (chars)
+  "Check if all characters in list have char-code <= 255."
+  (declare (xargs :guard (character-listp chars)))
+  (if (endp chars)
+      t
+    (and (< (char-code (car chars)) 256)
+         (acl2-safe-chars-p (cdr chars)))))
+
+(defthm booleanp-of-acl2-safe-chars-p
+  (booleanp (acl2-safe-chars-p chars))
+  :rule-classes :type-prescription)
+
+;; Key property: normalized strings are ACL2-safe (all char-codes <= 255)
+;; This is the critical invariant that allows LLM responses to be used in ACL2
+(defun acl2-safe-string-p (s)
+  "A string is ACL2-safe if all its characters have char-code <= 255."
+  (declare (xargs :guard (stringp s)))
+  (if (not (stringp s))
+      nil
+    (acl2-safe-chars-p (coerce s 'list))))
+
+(defthm booleanp-of-acl2-safe-string-p
+  (booleanp (acl2-safe-string-p s))
+  :rule-classes :type-prescription)
+
+;; Note: The theorem that normalize-unicode-string produces ACL2-safe strings
+;; cannot be proven in ACL2's logic because ACL2 cannot represent strings with
+;; char-code > 255. The property holds by construction in raw Lisp.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Main API
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
