@@ -252,8 +252,7 @@
                               (chat-message-list-p messages))
                   :stobjs state
                   :guard-hints (("Goal" :in-theory (disable post-json)))))
-  (b* (;; Serialize the request to JSON
-       (request-json (serialize-chat-request model messages))
+  (b* ((request-json (serialize-chat-request model messages))
        
        ;; HTTP headers for JSON API (charset=utf-8 required for proper Unicode)
        (headers '(("Content-Type" . "application/json; charset=utf-8")
