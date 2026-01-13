@@ -199,8 +199,8 @@
   (b* (;; Serialize the request to JSON
        (request-json (serialize-chat-request model messages))
        
-       ;; HTTP headers for JSON API
-       (headers '(("Content-Type" . "application/json")
+       ;; HTTP headers for JSON API (charset=utf-8 required for proper Unicode)
+       (headers '(("Content-Type" . "application/json; charset=utf-8")
                   ("Accept" . "application/json")))
        
        ;; Make HTTP POST request with proper guards
@@ -251,7 +251,7 @@
   (declare (xargs :guard (llm-provider-config-p config)))
   (let* ((api-key (llm-provider-config->api-key config))
          (org-id (llm-provider-config->org-id config))
-         (base-headers '(("Content-Type" . "application/json")
+         (base-headers '(("Content-Type" . "application/json; charset=utf-8")
                         ("Accept" . "application/json"))))
     (cond
      ;; No API key needed (local)

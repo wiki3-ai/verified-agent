@@ -202,7 +202,7 @@
                   :stobjs state
                   :mode :program))
   (b* ((request-json (serialize-mcp-initialize 1))
-       (headers '(("Content-Type" . "application/json")
+       (headers '(("Content-Type" . "application/json; charset=utf-8")
                   ("Accept" . "application/json, text/event-stream")))
        
        ((mv http-err body status-raw response-headers state)
@@ -244,7 +244,7 @@
                   :mode :program))
   (b* ((args-json (serialize-string-args args))
        (request-json (serialize-mcp-tool-call tool-name args-json *mcp-request-id*))
-       (headers (list (cons "Content-Type" "application/json")
+       (headers (list (cons "Content-Type" "application/json; charset=utf-8")
                       (cons "Accept" "application/json")
                       (cons "Mcp-Session-Id" transport-session-id)))
        

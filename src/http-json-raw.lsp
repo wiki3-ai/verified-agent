@@ -35,14 +35,17 @@
         (handler-case
             (multiple-value-bind (body status response-headers uri stream)
                 (dex:post url 
-                          :content json-body
+                          :content (babel:string-to-octets json-body :encoding :utf-8)
                           :headers headers
                           :connect-timeout connect-timeout
                           :read-timeout read-timeout
-                          :force-string t)  ; Force UTF-8 string decoding
+                          :force-binary t)  ; Get raw bytes
               (declare (ignore response-headers uri stream))
-              ;; Return success: nil error, body, status, state
-              (mv nil (if (stringp body) body "") status state))
+              ;; Decode response as UTF-8 explicitly
+              (let ((body-str (if (typep body '(array (unsigned-byte 8) (*)))
+                                  (babel:octets-to-string body :encoding :utf-8)
+                                  (if (stringp body) body ""))))
+                (mv nil body-str status state)))
           
           (error (condition)
                  (let ((condition-str (format nil "~a" condition)))
@@ -68,10 +71,13 @@
                        :headers headers
                        :connect-timeout connect-timeout
                        :read-timeout read-timeout
-                       :force-string t)  ; Force UTF-8 string decoding
+                       :force-binary t)  ; Get raw bytes
             (declare (ignore response-headers uri stream))
-            ;; Return success: nil error, body, status, state
-            (mv nil (if (stringp body) body "") status state))
+            ;; Decode response as UTF-8 explicitly
+            (let ((body-str (if (typep body '(array (unsigned-byte 8) (*)))
+                                (babel:octets-to-string body :encoding :utf-8)
+                                (if (stringp body) body ""))))
+              (mv nil body-str status state)))
         
         (error (condition)
                (let ((condition-str (format nil "~a" condition)))
@@ -97,22 +103,26 @@
         (handler-case
             (multiple-value-bind (body status response-headers uri stream)
                 (dex:post url 
-                          :content json-body
+                          :content (babel:string-to-octets json-body :encoding :utf-8)
                           :headers headers
                           :connect-timeout connect-timeout
                           :read-timeout read-timeout
-                          :force-string t)  ; Force UTF-8 string decoding
+                          :force-binary t)  ; Get raw bytes
               (declare (ignore uri stream))
               ;; Convert response-headers hash-table to alist
-              (let ((headers-alist 
-                     (if (hash-table-p response-headers)
-                         (loop for k being the hash-keys of response-headers
-                               using (hash-value v)
-                               collect (cons (string-downcase (if (stringp k) k (symbol-name k)))
-                                           (if (stringp v) v (format nil "~a" v))))
-                       nil)))
+              (let* ((headers-alist 
+                      (if (hash-table-p response-headers)
+                          (loop for k being the hash-keys of response-headers
+                                using (hash-value v)
+                                collect (cons (string-downcase (if (stringp k) k (symbol-name k)))
+                                            (if (stringp v) v (format nil "~a" v))))
+                        nil))
+                     ;; Decode response as UTF-8 explicitly
+                     (body-str (if (typep body '(array (unsigned-byte 8) (*)))
+                                   (babel:octets-to-string body :encoding :utf-8)
+                                   (if (stringp body) body ""))))
                 ;; Return success: nil error, body, status, headers-alist, state
-                (mv nil (if (stringp body) body "") status headers-alist state)))
+                (mv nil body-str status headers-alist state)))
           
           (error (condition)
                  (let ((condition-str (format nil "~a" condition)))
