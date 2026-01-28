@@ -191,8 +191,8 @@ Be concise. Show your reasoning.")
             (mv nil "")
           (mv t (my-string-trim (subseq rest 0 end-pos))))))))
 
-;; Execute ACL2 code via MCP
-(defun execute-acl2-code (code mcp-conn state)
+;; Execute ACL2 code via MCP (simple version - just calls execute)
+(defun execute-acl2-code-simple (code mcp-conn state)
   "Execute ACL2 code via MCP connection."
   (declare (xargs :mode :program :stobjs state))
   (if (not (mcp-connection-p mcp-conn))
@@ -224,7 +224,7 @@ Be concise. Show your reasoning.")
                 ;; Execute code and continue
                 (prog2$ (cw "~%[Executing: ~s0]~%" code)
                   (mv-let (exec-err result state)
-                    (execute-acl2-code code mcp-conn state)
+                    (execute-acl2-code-simple code mcp-conn state)
                     (let* ((tool-result (if exec-err
                                             (concatenate 'string "Error: " exec-err)
                                           result))
@@ -260,7 +260,7 @@ Be concise. Show your reasoning.")
                 ;; Execute code and continue
                 (prog2$ (cw "~%[Executing: ~s0]~%" code)
                   (mv-let (exec-err result state)
-                    (execute-acl2-code code mcp-conn state)
+                    (execute-acl2-code-simple code mcp-conn state)
                     (let* ((tool-result (if exec-err
                                             (concatenate 'string "Error: " exec-err)
                                           result))
@@ -315,7 +315,7 @@ Be concise. Show your reasoning.")
                 ;; Execute code and continue
                 (prog2$ (cw "~%[Executing: ~s0]~%" code)
                   (mv-let (exec-err result state)
-                    (execute-acl2-code code mcp-conn state)
+                    (execute-acl2-code-simple code mcp-conn state)
                     (let* ((tool-result (if exec-err
                                             (concatenate 'string "Error: " exec-err)
                                           result))
