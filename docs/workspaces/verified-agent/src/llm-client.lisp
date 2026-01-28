@@ -1,0 +1,630 @@
+; LLM Client -- HTTP client for LLM API calls
+;
+; Copyright (C) 2025
+;
+; License: See LICENSE file
+;
+; Author: AI Assistant with human guidance
+;
+; This book provides a verified LLM client using properly-guarded HTTP JSON
+; functions. All guards are maintained for formal verification.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(in-package "ACL2")
+
+(include-book "llm-types")
+(include-book "http-json" 
+              :ttags ((:quicklisp) (:quicklisp.dexador) (:http-json)))
+(include-book "std/strings/explode-nonnegative-integer" :dir :system)
+(include-book "kestrel/json-parser/parse-json" :dir :system)
+; (depends-on "llm-client-raw.lsp")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Configuration
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; LM Studio (local) endpoints
+(defconst *lm-studio-endpoint* 
+  "http://host.docker.internal:1234/v1/chat/completions")
+
+;; OpenAI-compatible models endpoint (basic info only)
+(defconst *lm-studio-models-endpoint*
+  "http://host.docker.internal:1234/v1/models")
+
+;; LM Studio native API (full model info with type, state, context length)
+(defconst *lm-studio-v0-models-endpoint*
+  "http://host.docker.internal:1234/api/v0/models")
+
+;; OpenAI cloud endpoints
+(defconst *openai-endpoint*
+  "https://api.openai.com/v1/chat/completions")
+
+(defconst *openai-completions-endpoint*
+  "https://api.openai.com/v1/completions")
+
+(defconst *openai-models-endpoint*
+  "https://api.openai.com/v1/models")
+
+(defconst *llm-connect-timeout* 30)   ; seconds
+(defconst *llm-read-timeout* 120)     ; seconds (higher for slow local models)
+
+;; Default provider configs (for convenience)
+(defconst *local-provider-config*
+  (make-llm-provider-config
+   :provider (llm-provider-local)
+   :endpoint *lm-studio-endpoint*
+   :api-key ""
+   :model ""
+   :org-id ""))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; JSON Serialization Helpers
+;;
+;; Logical specifications - raw Lisp provides actual implementation.
+;; These maintain proper guards (stringp returns).
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Serialize a single chat message to JSON object string
+;; Input: chat-message-p
+;; Output: stringp like {"role":"user","content":"hello"}
+(defun serialize-chat-message (msg)
+  (declare (xargs :guard (chat-message-p msg))
+           (ignore msg))
+  (prog2$ (er hard? 'serialize-chat-message "Raw Lisp definition not installed?")
+          "{}"))
+
+(defthm stringp-of-serialize-chat-message
+  (stringp (serialize-chat-message msg)))
+
+;; Serialize a list of chat messages to JSON array string
+;; Input: chat-message-list-p
+;; Output: stringp like [{"role":"user","content":"hello"}]
+(defun serialize-chat-messages (messages)
+  (declare (xargs :guard (chat-message-list-p messages))
+           (ignore messages))
+  (prog2$ (er hard? 'serialize-chat-messages "Raw Lisp definition not installed?")
+          "[]"))
+
+(defthm stringp-of-serialize-chat-messages
+  (stringp (serialize-chat-messages messages)))
+
+;; Serialize full chat completion request to JSON string
+;; Input: model (stringp), messages (chat-message-list-p)
+;; Output: stringp like {"model":"...","messages":[...]}
+(defun serialize-chat-request (model messages)
+  (declare (xargs :guard (and (stringp model) (chat-message-list-p messages)))
+           (ignore model messages))
+  (prog2$ (er hard? 'serialize-chat-request "Raw Lisp definition not installed?")
+          "{}"))
+
+(defthm stringp-of-serialize-chat-request
+  (stringp (serialize-chat-request model messages)))
+
+;; Serialize completions request (for Codex models)
+;; Input: model (stringp), messages (chat-message-list-p), max-tokens (natp)
+;; Output: stringp like {"model":"...","prompt":"...","max_tokens":...}
+(defun serialize-completions-request (model messages max-tokens)
+  (declare (xargs :guard (and (stringp model) 
+                              (chat-message-list-p messages)
+                              (natp max-tokens)))
+           (ignore model messages max-tokens))
+  (prog2$ (er hard? 'serialize-completions-request "Raw Lisp definition not installed?")
+          "{}"))
+
+(defthm stringp-of-serialize-completions-request
+  (stringp (serialize-completions-request model messages max-tokens)))
+
+;; Parse chat completion response JSON, extract assistant message content
+;; Input: json response string
+;; Output: content string (empty on parse failure)
+;; Note: Implementation in llm-client-raw.lsp uses kestrel/json-parser
+(defun parse-chat-response (json)
+  (declare (xargs :guard (stringp json))
+           (ignore json))
+  (prog2$ (er hard? 'parse-chat-response "Raw Lisp definition not installed?")
+          ""))
+
+(defthm stringp-of-parse-chat-response
+  (stringp (parse-chat-response json)))
+
+;; Parse completions response JSON, extract generated text
+;; Input: json response string
+;; Output: text string (empty on parse failure)
+(defun parse-completions-response (json)
+  (declare (xargs :guard (stringp json))
+           (ignore json))
+  (prog2$ (er hard? 'parse-completions-response "Raw Lisp definition not installed?")
+          ""))
+
+(defthm stringp-of-parse-completions-response
+  (stringp (parse-completions-response json)))
+
+;; Parse models response JSON, extract list of model IDs
+;; Input: json response string from /v1/models (OpenAI format)
+;; Output: list of model ID strings (nil on parse failure)
+;; Note: Implementation in llm-client-raw.lsp uses kestrel/json-parser
+(defun parse-models-response (json)
+  (declare (xargs :guard (stringp json))
+           (ignore json))
+  (prog2$ (er hard? 'parse-models-response "Raw Lisp definition not installed?")
+          nil))
+
+(defthm string-listp-of-parse-models-response
+  (string-listp (parse-models-response json)))
+
+;; Parse LM Studio v0 models response JSON, extract full model info
+;; Input: json response string from /api/v0/models 
+;; Output: list of model-info-p (nil on parse failure)
+;; Note: Implementation in llm-client-raw.lsp uses kestrel/json-parser
+(defun parse-v0-models-response (json)
+  (declare (xargs :guard (stringp json))
+           (ignore json))
+  (prog2$ (er hard? 'parse-v0-models-response "Raw Lisp definition not installed?")
+          nil))
+
+(defthm model-info-list-p-of-parse-v0-models-response
+  (model-info-list-p (parse-v0-models-response json)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Unicode Normalization
+;;
+;; ACL2's character model only supports char-codes 0-255. LLM responses often
+;; contain Unicode characters (smart quotes, em-dashes, etc.) with codes > 255.
+;; This function normalizes them to ASCII equivalents.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Normalize Unicode characters in a string to ASCII/Latin-1
+;; Input: any string (may contain Unicode chars > 255)
+;; Output: string with all chars having char-code <= 255
+;; Common mappings:
+;;   - Smart quotes (U+2018-201F) -> ASCII ' or "
+;;   - Dashes (U+2010-2015, U+2212) -> ASCII -
+;;   - Bullets (U+2022) -> ASCII *
+;;   - Arrows (U+2192) -> ASCII >
+;;   - Unknown chars > 255 -> ?
+(defun normalize-unicode-string (s)
+  (declare (xargs :guard (stringp s))
+           (ignore s))
+  (prog2$ (er hard? 'normalize-unicode-string "Raw Lisp definition not installed?")
+          ""))
+
+(defthm stringp-of-normalize-unicode-string
+  (stringp (normalize-unicode-string s)))
+
+;; Helper: check if all characters in list have char-code <= 255
+(defun acl2-safe-chars-p (chars)
+  "Check if all characters in list have char-code <= 255."
+  (declare (xargs :guard (character-listp chars)))
+  (if (endp chars)
+      t
+    (and (< (char-code (car chars)) 256)
+         (acl2-safe-chars-p (cdr chars)))))
+
+(defthm booleanp-of-acl2-safe-chars-p
+  (booleanp (acl2-safe-chars-p chars))
+  :rule-classes :type-prescription)
+
+;; Key property: normalized strings are ACL2-safe (all char-codes <= 255)
+;; This is the critical invariant that allows LLM responses to be used in ACL2
+(defun acl2-safe-string-p (s)
+  "A string is ACL2-safe if all its characters have char-code <= 255."
+  (declare (xargs :guard (stringp s)))
+  (if (not (stringp s))
+      nil
+    (acl2-safe-chars-p (coerce s 'list))))
+
+(defthm booleanp-of-acl2-safe-string-p
+  (booleanp (acl2-safe-string-p s))
+  :rule-classes :type-prescription)
+
+;; Note: The theorem that normalize-unicode-string produces ACL2-safe strings
+;; cannot be proven in ACL2's logic because ACL2 cannot represent strings with
+;; char-code > 255. The property holds by construction in raw Lisp.
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Main API
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Helper to check if HTTP status indicates success (2xx)
+(defun http-success-p (status)
+  (declare (xargs :guard (natp status)))
+  (and (>= status 200)
+       (< status 300)))
+
+(defthm booleanp-of-http-success-p
+  (booleanp (http-success-p status))
+  :rule-classes :type-prescription)
+
+;; Call LLM chat completion API
+;;
+;; Parameters:
+;;   model    - Model identifier string (e.g., "local-model")
+;;   messages - Conversation history as chat-message-list
+;;   state    - ACL2 state
+;;
+;; Returns: (mv error response state)
+;;   error    - NIL on success, error string on failure
+;;   response - Assistant's response content (stringp, empty on error)
+;;   state    - Updated state
+(defun llm-chat-completion (model messages state)
+  (declare (xargs :guard (and (stringp model)
+                              (chat-message-list-p messages))
+                  :stobjs state
+                  :guard-hints (("Goal" :in-theory (disable post-json)))))
+  (b* ((request-json (serialize-chat-request model messages))
+       
+       ;; HTTP headers for JSON API (charset=utf-8 required for proper Unicode)
+       (headers '(("Content-Type" . "application/json; charset=utf-8")
+                  ("Accept" . "application/json")))
+       
+       ;; Make HTTP POST request with proper guards
+       ((mv err response-body status-raw state)
+        (post-json *lm-studio-endpoint*
+                   request-json
+                   headers
+                   *llm-connect-timeout*
+                   *llm-read-timeout*
+                   state))
+       
+       ;; Coerce status to natp (it is, via theorem, but help guard verification)
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err "" state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string))
+            ""
+            state))
+       
+       ;; Parse the response JSON to extract assistant content
+       (content (parse-chat-response response-body)))
+    
+    (mv nil content state)))
+
+;; Return type theorems for llm-chat-completion
+(defthm stringp-of-llm-chat-completion-response
+  (stringp (mv-nth 1 (llm-chat-completion model messages state))))
+
+(defthm state-p1-of-llm-chat-completion
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-chat-completion model messages state)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Provider-Aware Chat Completion
+;;
+;; Use a provider configuration to call the appropriate LLM API.
+;; Supports local (LM Studio), OpenAI, and custom OpenAI-compatible endpoints.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Build headers for provider (adds Authorization for cloud providers)
+(defun make-provider-headers (config)
+  (declare (xargs :guard (llm-provider-config-p config)))
+  (let* ((api-key (llm-provider-config->api-key config))
+         (org-id (llm-provider-config->org-id config))
+         (base-headers '(("Content-Type" . "application/json; charset=utf-8")
+                        ("Accept" . "application/json"))))
+    (cond
+     ;; No API key needed (local)
+     ((equal api-key "")
+      base-headers)
+     ;; Has API key - add Authorization header
+     (t
+      (let ((auth-headers 
+             (cons (cons "Authorization" 
+                        (concatenate 'string "Bearer " api-key))
+                   base-headers)))
+        ;; Add org header if present
+        (if (equal org-id "")
+            auth-headers
+          (cons (cons "OpenAI-Organization" org-id)
+                auth-headers)))))))
+
+(defthm alistp-of-make-provider-headers
+  (alistp (make-provider-headers config)))
+
+;; Call LLM chat completion API with provider configuration
+;;
+;; Parameters:
+;;   config   - LLM provider configuration
+;;   messages - Conversation history as chat-message-list
+;;   state    - ACL2 state
+;;
+;; Returns: (mv error response state)
+;;   error    - NIL on success, error string on failure
+;;   response - Assistant's response content (stringp, empty on error)
+;;   state    - Updated state
+(defun llm-chat-completion-with-provider (config messages state)
+  (declare (xargs :guard (and (llm-provider-config-p config)
+                              (chat-message-list-p messages))
+                  :stobjs state
+                  :guard-hints (("Goal" :in-theory (disable post-json)))))
+  (b* (;; Get endpoint and model from config
+       (endpoint (llm-provider-config->endpoint config))
+       (model (llm-provider-config->model config))
+       
+       ;; Validate config
+       ((when (equal endpoint ""))
+        (mv "Provider config missing endpoint" "" state))
+       ((when (equal model ""))
+        (mv "Provider config missing model" "" state))
+       ((when (and (provider-requires-api-key-p config)
+                   (equal (llm-provider-config->api-key config) "")))
+        (mv "Provider requires API key but none configured" "" state))
+       
+       ;; Serialize the request to JSON
+       (request-json (serialize-chat-request model messages))
+       
+       ;; Build headers with auth if needed
+       (headers (make-provider-headers config))
+       
+       ;; Make HTTP POST request
+       ((mv err response-body status-raw state)
+        (post-json endpoint
+                   request-json
+                   headers
+                   *llm-connect-timeout*
+                   *llm-read-timeout*
+                   state))
+       
+       ;; Coerce status to natp
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err "" state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string))
+            ""
+            state))
+       
+       ;; Parse the response JSON to extract assistant content
+       (content (parse-chat-response response-body)))
+    
+    (mv nil content state)))
+
+;; Return type theorems for llm-chat-completion-with-provider
+(defthm stringp-of-llm-chat-completion-with-provider-response
+  (stringp (mv-nth 1 (llm-chat-completion-with-provider config messages state))))
+
+(defthm state-p1-of-llm-chat-completion-with-provider
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-chat-completion-with-provider config messages state)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Completions API (for Codex models)
+;;
+;; Codex models use /v1/completions endpoint with prompt instead of messages.
+;; This function converts chat messages to a prompt and calls completions API.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defconst *default-max-tokens* 2048)
+
+;; Call LLM completions API with provider configuration (for Codex models)
+;;
+;; Parameters:
+;;   config     - LLM provider configuration (endpoint will be modified to /completions)
+;;   messages   - Conversation history as chat-message-list (converted to prompt)
+;;   max-tokens - Maximum tokens to generate (default 2048)
+;;   state      - ACL2 state
+;;
+;; Returns: (mv error response state)
+;;   error    - NIL on success, error string on failure
+;;   response - Generated text (stringp, empty on error)
+;;   state    - Updated state
+(defun llm-completions-with-provider (config messages max-tokens state)
+  (declare (xargs :guard (and (llm-provider-config-p config)
+                              (chat-message-list-p messages)
+                              (natp max-tokens))
+                  :stobjs state
+                  :guard-hints (("Goal" :in-theory (disable post-json)))))
+  (b* (;; Get model from config, use completions endpoint
+       (model (llm-provider-config->model config))
+       
+       ;; Use the completions endpoint
+       (endpoint *openai-completions-endpoint*)
+       
+       ;; Validate config
+       ((when (equal model ""))
+        (mv "Provider config missing model" "" state))
+       ((when (and (provider-requires-api-key-p config)
+                   (equal (llm-provider-config->api-key config) "")))
+        (mv "Provider requires API key but none configured" "" state))
+       
+       ;; Serialize the request to JSON (converts messages to prompt)
+       (request-json (serialize-completions-request model messages max-tokens))
+       
+       ;; Build headers with auth if needed
+       (headers (make-provider-headers config))
+       
+       ;; Make HTTP POST request
+       ((mv err response-body status-raw state)
+        (post-json endpoint
+                   request-json
+                   headers
+                   *llm-connect-timeout*
+                   *llm-read-timeout*
+                   state))
+       
+       ;; Coerce status to natp
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err "" state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string)
+                        " - " response-body)
+            ""
+            state))
+       
+       ;; Parse the response JSON to extract generated text
+       (content (parse-completions-response response-body)))
+    
+    (mv nil content state)))
+
+;; Return type theorems for llm-completions-with-provider
+(defthm stringp-of-llm-completions-with-provider-response
+  (stringp (mv-nth 1 (llm-completions-with-provider config messages max-tokens state))))
+
+(defthm state-p1-of-llm-completions-with-provider
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-completions-with-provider config messages max-tokens state)))))
+
+;; List available models from LLM server
+;;
+;; Parameters:
+;;   state - ACL2 state
+;;
+;; Returns: (mv error models state)
+;;   error  - NIL on success, error string on failure
+;;   models - List of model ID strings (string-listp)
+;;   state  - Updated state
+(defun llm-list-models (state)
+  (declare (xargs :stobjs state))
+  (b* (;; HTTP headers for JSON API
+       (headers '(("Accept" . "application/json")))
+       
+       ;; Make HTTP GET request
+       ((mv err response-body status-raw state)
+        (get-json *lm-studio-models-endpoint*
+                  headers
+                  *llm-connect-timeout*
+                  *llm-read-timeout*
+                  state))
+       
+       ;; Coerce status to natp
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err nil state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string))
+            nil
+            state))
+       
+       ;; Parse the response JSON to extract model list
+       (models (parse-models-response response-body)))
+    
+    (mv nil models state)))
+
+;; Return type theorems for llm-list-models
+(defthm string-listp-of-llm-list-models-models
+  (string-listp (mv-nth 1 (llm-list-models state))))
+
+(defthm state-p1-of-llm-list-models
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-list-models state)))))
+
+;; List available models with full info from LM Studio v0 API
+;;
+;; Parameters:
+;;   state - ACL2 state
+;;
+;; Returns: (mv error models state)
+;;   error  - NIL on success, error string on failure
+;;   models - List of model-info-p with full details
+;;   state  - Updated state
+(defun llm-list-models-full (state)
+  (declare (xargs :stobjs state))
+  (b* (;; HTTP headers for JSON API
+       (headers '(("Accept" . "application/json")))
+       
+       ;; Make HTTP GET request to v0 API
+       ((mv err response-body status-raw state)
+        (get-json *lm-studio-v0-models-endpoint*
+                  headers
+                  *llm-connect-timeout*
+                  *llm-read-timeout*
+                  state))
+       
+       ;; Coerce status to natp
+       (status (mbe :logic (nfix status-raw) :exec status-raw))
+       
+       ;; Check for network/connection errors
+       ((when err)
+        (mv err nil state))
+       
+       ;; Check for HTTP error status
+       ((unless (http-success-p status))
+        (mv (concatenate 'string "HTTP error: status " 
+                        (coerce (explode-nonnegative-integer status 10 nil) 'string))
+            nil
+            state))
+       
+       ;; Parse the response JSON to extract full model info
+       (models (parse-v0-models-response response-body)))
+    
+    (mv nil models state)))
+
+;; Return type theorems for llm-list-models-full
+(defthm model-info-list-p-of-llm-list-models-full-models
+  (model-info-list-p (mv-nth 1 (llm-list-models-full state))))
+
+(defthm state-p1-of-llm-list-models-full
+  (implies (state-p1 state)
+           (state-p1 (mv-nth 2 (llm-list-models-full state)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Model Selection
+;;
+;; Select the best model from available models based on preferences.
+;; Default: first loaded completions model that matches any preference string.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Check if model ID contains a preference substring (case-insensitive would be 
+;; nice but we'll do exact substring for now)
+(defun model-matches-pref-p (model-id pref)
+  (declare (xargs :guard (and (stringp model-id) (stringp pref))))
+  (search pref model-id))
+
+;; Find first model matching any of the preferences
+;; Implementation in raw Lisp uses LOOP for efficiency
+(defun find-matching-model (models prefs)
+  (declare (xargs :guard (and (model-info-list-p models)
+                              (string-listp prefs)))
+           (ignore models prefs))
+  (prog2$ (er hard? 'find-matching-model "Raw Lisp definition not installed?")
+          nil))
+
+;; Select best model for completions
+;;
+;; Parameters:
+;;   models - Full model info list from llm-list-models-full
+;;   prefs  - List of preference strings to match (partial match on model ID)
+;;
+;; Returns: model-info-p or nil if no suitable model found
+;;
+;; Selection order:
+;; 1. First loaded completions model matching a preference (in pref order)
+;; 2. First loaded completions model (if no prefs or no match)
+;; 3. NIL if no loaded completions models
+(defun select-completions-model (models prefs)
+  (declare (xargs :guard (and (model-info-list-p models)
+                              (string-listp prefs)))
+           (ignore models prefs))
+  (prog2$ (er hard? 'select-completions-model "Raw Lisp definition not installed?")
+          nil))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Trust tag and raw Lisp inclusion for serialization functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defttag :llm-client)
+(include-raw "llm-client-raw.lsp"
+             :host-readtable t)
+
