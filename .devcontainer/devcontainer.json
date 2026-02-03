@@ -12,13 +12,13 @@
     },
     "containerEnv": {
         "JUPYTER_PORT": "8888",
-        "RESTARTABLE": "yes",
+        "RESTARTABLE": "yes"
     },
     "remoteEnv": {
         "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
-        "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}"
+        "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:HOME}/.cargo/bin:${containerEnv:PATH}"
     },
-    "postCreateCommand": "[ -d ${containerWorkspaceFolder}/.venv ] || (python3 -m venv ${containerWorkspaceFolder}/.venv && ${containerWorkspaceFolder}/.venv/bin/pip install --upgrade pip && ${containerWorkspaceFolder}/.venv/bin/pip install -e ${containerWorkspaceFolder}/acl2-mcp)",
+    "postCreateCommand": ".devcontainer/post-create.sh ${containerWorkspaceFolder}",
     "postStartCommand": "grep -q 'source.*\\.venv/bin/activate' ~/.bashrc || echo 'source ${containerWorkspaceFolder}/.venv/bin/activate' >> ~/.bashrc",
     "customizations": {
         "vscode": {

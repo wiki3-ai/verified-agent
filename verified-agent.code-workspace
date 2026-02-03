@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../home/acl2"
+		},
+		{
+			"path": "../../home/jovyan"
 		}
 	],
 	"settings": {
