@@ -12,7 +12,12 @@
     },
     "containerEnv": {
         "JUPYTER_PORT": "8888",
-        "RESTARTABLE": "yes"
+        "RESTARTABLE": "yes",
+        "USER": "jovyan",
+        "ACL2_LISP": "sbcl",
+        "ACL2": "/home/acl2/saved_acl2",
+        "ACL2_HOME": "/home/acl2",
+        "ACL2_SYSTEM_BOOKS": "/home/acl2/books"        
     },
     "remoteEnv": {
         "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
@@ -25,7 +30,8 @@
             "extensions": [
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "ms-toolsai.jupyter"
+                "ms-toolsai.jupyter",
+                "ms-copilot.vscode-copilot-chat"
             ],
             "settings": {
                 "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
