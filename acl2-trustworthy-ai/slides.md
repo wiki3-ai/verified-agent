@@ -2,6 +2,7 @@
 marp: true
 theme: default
 paginate: true
+html: true
 style: |
   :root {
     --accent: #4a6cf7;
@@ -9,9 +10,13 @@ style: |
   section {
     font-family: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', sans-serif;
     font-size: 26px;
-    line-height: 1.32;
-    padding: 34px 52px;
+    line-height: 1.28;
+    padding: 26px 44px;
     letter-spacing: -0.005em;
+    /* Top-align instead of Marp's default vertical centering so dense
+       slides use the full canvas height. */
+    justify-content: flex-start;
+    align-content: flex-start;
   }
   h1, h2 {
     color: #1a2540;
@@ -604,6 +609,7 @@ https://www.eff.org/deeplinks/2015/04/remembering-case-established-code-speech
 We're at risk to many losses as a consequence of disruptive AI technology (which Andrew Ng called ["The New Electricity" in 2017](https://www.gsb.stanford.edu/insights/andrew-ng-why-ai-new-electricity)), just as we continue to be as a result of other titanic advances in human history such as the discovery of applications for fire, electricity, and nuclear reactions.
 
 Many of these risks are due to the massive technical debt created by humans building computer systems over the last 70 years but any attempts to "slow down" or regulate progress will only apply to the law-abiding defenders which means the only effect will be to make their ability to counter the attackers will be slower and less effective.
+
 
 
 <script>

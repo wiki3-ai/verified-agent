@@ -11,6 +11,7 @@
 		}
 	],
 	"settings": {
-		"makefile.configureOnOpen": false
+		"makefile.configureOnOpen": false,
+		"markdown.marp.html": "all"
 	}
 }
