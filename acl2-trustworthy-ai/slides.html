@@ -1067,7 +1067,7 @@ section.dense {
 section.dense pre { font-size: 0.58em; }
 section.dense table { font-size: 0.7em; }
 ;" data-marpit-pagination-total="21">
-<h2 id="slowing-down-is-not-an-option">&quot;Slowing Down&quot; Is <strong>Not</strong> An Option</h2>
+<h2 id="slowing-down-or-even-bans-are-not-an-option">Slowing Down Or Even Bans Are <strong>Not</strong> An Option</h2>
 <p>We're at risk for many losses as a consequence of disruptive AI technology (which Andrew Ng called <a href="https://www.gsb.stanford.edu/insights/andrew-ng-why-ai-new-electricity">&quot;The New Electricity&quot; in 2017</a>), just as we continue to be as a result of other titanic advances in human history such as the discovery of applications of fire, electricity, and nuclear reactions.</p>
 <p>Many of these risks are due to the massive technical debt created by humans building computer systems over the last 70 years but <strong>any attempts to &quot;slow down&quot; or regulate progress will only be obeyed by the law-abiding defenders which means the only effect will be to make their ability to counter the attackers slower and less effective.</strong></p>
 <p>Responsible researchers and defenders like OpenAI should, and usually do, take reasonable precautions with time-sensitive vulnerabilities (e.g. cryptography, Linux PE).  Sometimes they also make dumb and expensive mistakes (e.g. Hugging Face hack).</p>
@@ -3874,7 +3874,7 @@ section.dense table { font-size: 0.7em; }
 <h2 id="semantic-web">Semantic Web</h2>
 <p>Beginning in 1998, Sir Tim Berners-Lee led the effort to create a vision for the future of the web which included publishing the Semantic Web manifesto in Scientific American in 2001.  It built on the ideas of Cyc and addressed its shortcomings which included being closed and inside-out/bottom-up (i.e. a classic application of formal methods) rather than decentralized/local-first, and open like the WWW.</p>
 <p>RDF, OWL, PROV-O, N3, SPARQL, SHACL, ...</p>
-<p>Wikidata.org, dbpedia.org, <a href="https://obofoundry.org/">https://obofoundry.org/</a></p>
+<p><a href="https://www.wikidata.org/">Wikidata.org</a>, <a href="https://www.dbpedia.org/">dbpedia.org</a>, <a href="https://lod-cloud.net/">Linked Open Data</a>, <a href="https://obofoundry.org/">https://obofoundry.org/</a>, <a href="https://geneontology.org/">geneontology.org</a>, <a href="https://www.uniprot.org/">UniProt.org</a>, ...</p>
 <p>Found significant application in some specialized domains like bioscience, geoscience, fraud detection, and search engines.  Supports interoperability in many more (e.g. SUMO, SBOM).</p>
 <p><a href="https://cacm.acm.org/research/a-review-of-the-semantic-web-field/">https://cacm.acm.org/research/a-review-of-the-semantic-web-field/</a></p>
 <h3 id="lessons">Lessons</h3>
@@ -4082,9 +4082,22 @@ section.dense {
 section.dense pre { font-size: 0.58em; }
 section.dense table { font-size: 0.7em; }
 ;" data-marpit-pagination-total="21">
-<h2 id="knowledge-graphs-for-llm-reasoning-acting-react-agents">Knowledge Graphs for LLM Reasoning-Acting (ReAct) Agents</h2>
+<h2 id="knowledge-graphs--logical-inference-for-llm-agents">Knowledge Graphs &amp; Logical Inference for LLM Agents</h2>
 <p>GraphRAG uses KG retrieval to improve RAG quality for LLM agent contexts.</p>
 <p>LLMs also widely used for constructing and populating KGs.</p>
+<p><em>KAG: Boosting LLMs in Professional Domains via Knowledge Augmented Generation</em> <a href="https://arxiv.org/abs/2409.13731">https://arxiv.org/abs/2409.13731</a></p>
+<pre is="marp-pre" data-auto-scaling="downscale-only"><code>question: What is the sum of 30 + 6 and the age of the founder of Tesla in 2027 ?
+Step1: What is the sum of 30 + 6 ?
+Logical Form: math1 = Math(30+6)
+Step2: Who is the founder of Tesla?
+Logical Form: Retrieval(s=s2:Company[Tesla], p=p2:founder, o=o2)
+Step3: In which year was the founder of Tesla born?
+Logical Form: Retrieval(s=o2, p=p3:yearOfBirth, o=o3)
+Step4: How old will the founder of Tesla be in the year 2027?
+Logical Form: math4 = Math(2027-o3)
+Step5: What is the sum of math1 and math4?
+Logical Form: math5 = Math(math1+math4)
+</code></pre>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="20" data-paginate="true" data-theme="default" data-style=":root {
   --accent: #4a6cf7;
@@ -4288,10 +4301,16 @@ section.dense pre { font-size: 0.58em; }
 section.dense table { font-size: 0.7em; }
 ;" data-marpit-pagination-total="21">
 <h2 id="a-trustworthy-semantic-web-agent">A Trustworthy Semantic Web Agent</h2>
-<p>An agent loop which uses transparent and interpretable information in a KG to make verifiably correct decisions and actions.</p>
+<p>An agent which uses transparent and interpretable information in a KG to make verifiably correct decisions and actions.</p>
 <p>Only use language models for natural language to formal language (NL2FL aka autoformalization).  These models can be far smaller than the powerful models used for coding.  They also only need contexts of natural/human size in order to perform local inference necessary for NLU.</p>
-<p>Formal methods for validating KG ontology updates from LLM agents.<br />
+<p><img src="faithful.png" alt="alt text" />   <em>Faithful Chain-of-Thought Reasoning</em> <a href="https://arxiv.org/abs/2301.13379">https://arxiv.org/abs/2301.13379</a></p>
+<p><em>Open Ontologies: Tool-Augmented Ontology Engineering with Stable Matching Alignment</em><br />
+<a href="https://arxiv.org/abs/2605.09184">https://arxiv.org/abs/2605.09184</a><br />
 <a href="https://github.com/fabio-rovai/open-ontologies">https://github.com/fabio-rovai/open-ontologies</a></p>
+<blockquote>
+<p>Open Ontologies ... integrates LLM-driven construction with formal OWL reasoning and ontology alignment</p>
+</blockquote>
+<p><strong>Hybrid Agents: NL2FL, KG, formal reasoning</strong></p>
 </section>
 </foreignObject></svg><svg data-marpit-svg="" viewBox="0 0 1280 720"><foreignObject width="1280" height="720"><section id="21" data-paginate="true" data-theme="default" data-style=":root {
   --accent: #4a6cf7;

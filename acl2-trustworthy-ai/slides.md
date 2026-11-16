@@ -173,7 +173,7 @@ https://www.eff.org/deeplinks/2015/04/remembering-case-established-code-speech
 
 ---
 
-## "Slowing Down" Is **Not** An Option
+## Slowing Down Or Even Bans Are **Not** An Option
 
 We're at risk for many losses as a consequence of disruptive AI technology (which Andrew Ng called ["The New Electricity" in 2017](https://www.gsb.stanford.edu/insights/andrew-ng-why-ai-new-electricity)), just as we continue to be as a result of other titanic advances in human history such as the discovery of applications of fire, electricity, and nuclear reactions.
 
@@ -455,7 +455,7 @@ Beginning in 1998, Sir Tim Berners-Lee led the effort to create a vision for the
 
 RDF, OWL, PROV-O, N3, SPARQL, SHACL, ...
 
-Wikidata.org, dbpedia.org, https://obofoundry.org/
+[Wikidata.org](https://www.wikidata.org/), [dbpedia.org](https://www.dbpedia.org/), [Linked Open Data](https://lod-cloud.net/), https://obofoundry.org/, [geneontology.org](https://geneontology.org/), [UniProt.org](https://www.uniprot.org/), ...
 
 Found significant application in some specialized domains like bioscience, geoscience, fraud detection, and search engines.  Supports interoperability in many more (e.g. SUMO, SBOM).
 
@@ -468,26 +468,47 @@ Specification **Is** Hard
 
 ---
 
-## Knowledge Graphs for LLM Reasoning-Acting (ReAct) Agents
+## Knowledge Graphs & Logical Inference for LLM Agents
 
 GraphRAG uses KG retrieval to improve RAG quality for LLM agent contexts.
 
 LLMs also widely used for constructing and populating KGs.
 
 
+*KAG: Boosting LLMs in Professional Domains via Knowledge Augmented Generation* https://arxiv.org/abs/2409.13731
+
+```
+question: What is the sum of 30 + 6 and the age of the founder of Tesla in 2027 ?
+Step1: What is the sum of 30 + 6 ?
+Logical Form: math1 = Math(30+6)
+Step2: Who is the founder of Tesla?
+Logical Form: Retrieval(s=s2:Company[Tesla], p=p2:founder, o=o2)
+Step3: In which year was the founder of Tesla born?
+Logical Form: Retrieval(s=o2, p=p3:yearOfBirth, o=o3)
+Step4: How old will the founder of Tesla be in the year 2027?
+Logical Form: math4 = Math(2027-o3)
+Step5: What is the sum of math1 and math4?
+Logical Form: math5 = Math(math1+math4)
+```
 
 ---
 
 ## A Trustworthy Semantic Web Agent
 
-An agent loop which uses transparent and interpretable information in a KG to make verifiably correct decisions and actions.  
+An agent which uses transparent and interpretable information in a KG to make verifiably correct decisions and actions.  
 
 Only use language models for natural language to formal language (NL2FL aka autoformalization).  These models can be far smaller than the powerful models used for coding.  They also only need contexts of natural/human size in order to perform local inference necessary for NLU.
 
-Formal methods for validating KG ontology updates from LLM agents.
+![alt text](faithful.png)   *Faithful Chain-of-Thought Reasoning* https://arxiv.org/abs/2301.13379
+
+*Open Ontologies: Tool-Augmented Ontology Engineering with Stable Matching Alignment*
+https://arxiv.org/abs/2605.09184
 https://github.com/fabio-rovai/open-ontologies
 
+> Open Ontologies ... integrates LLM-driven construction with formal OWL reasoning and ontology alignment 
 
+
+**Hybrid Agents: NL2FL, KG, formal reasoning**
 
 ---
 
