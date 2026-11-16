@@ -113,7 +113,7 @@ November 16th, 2026
 and Its Applications (ACL2-2026)](https://www.cs.utexas.edu/~moore/acl2/workshop-2026/index.html)
 Menlo Park, California, USA
 
-https://wiki3-ai.github.io/verified-agent/acl2-trustworthy-ai/slides.html
+https://wiki3-ai.github.io/verified-agent/acl2-trustworthy-ai/slides.html [PDF](slides.pdf)
 
 ![https://wiki3-ai.github.io/verified-agent/acl2-trustworthy-ai/slides.html](qr_code.png)
 
@@ -140,15 +140,17 @@ https://stanfordmag.org/contents/he-taught-ai-the-facts-of-life
 
 ## Why Do We Need Trustworthy AI?
 
-- **ByBit:** The $1.5B Bybit hack was pulled off primarily through social engineering and supply-chain compromise — a Safe{Wallet} developer was tricked into running malicious software, allowing attackers to inject code that deceived Bybit's signers — with AI playing, at most, a supporting role in fabricated identities. [chainalysis](https://www.chainalysis.com/blog/bybit-exchange-hack-february-2025-crypto-security-dprk/)
+- **Palantir:** US AI-powered warfare tooling using stale information targeted a school killing more than 150 people, most of whom were children.
+*Palantir’s Co-Founder Thinks We Should Be Less Judgmental About That Deadly Iran School Strike* [Mother Jones](https://www.motherjones.com/politics/2026/09/palantirs-co-founder-thinks-we-should-be-less-judgmental-about-that-deadly-iran-school-strike/)
 
-- **Binance:** In the $6.3B Binance heist, AI played a direct role at multiple stages — a tampered AI coding tool started the compromise, AI-assisted fake job interviews built trust, and attackers hijacked Binance's own internal AI tool to reach the wallet infrastructure team. [reuters](https://www.reuters.com/world/binance-says-hackers-used-fake-job-interview-compromise-computer-before-63-2026-11-03/)
+- **Flock:** Flock cameras frequently make false positive identifications which police act upon violating innocent people's rights because they trust the AI system rather than taking it as unverified lead and performing a lawful investigation.
+*Dozens of Innocent Motorists Have Been Pulled Over, Detained at Gunpoint, or Jailed Due to AI License Plate Camera Errors* [Institute for Justice](https://ij.org/dozens-of-innocent-motorists-have-been-pulled-over-detained-at-gunpoint-or-jailed-due-to-ai-license-plate-camera-errors/?utm_source=chatgpt.com)
 
-- **ByBit:** AI played, at most, a supporting role — the confirmed vector was social engineering of a Safe{Wallet} developer and malicious code injection, with no evidence AI drove the breach itself. [chainalysis](https://www.chainalysis.com/blog/bybit-exchange-hack-february-2025-crypto-security-dprk/)
+- **ByBit:** The $1.5B Bybit hack was pulled off with supply-chain compromise — a Safe{Wallet} developer was tricked into running malicious software, allowing attackers to inject code that deceived Bybit's signers. [Chainalysis](https://www.chainalysis.com/blog/bybit-exchange-hack-february-2025-crypto-security-dprk/)
 
-- **Binance:** Hackers' entry point was "vibe coding" gone wrong — an engineer downloaded a tampered AI coding tool, and attackers later hijacked Binance's own internal AI tool as a springboard to seize control of wallet-infrastructure machines. [reuters](https://www.reuters.com/world/binance-says-hackers-used-fake-job-interview-compromise-computer-before-63-2026-11-03/)
+- **Binance:** In the $6.3B Binance heist a tampered AI coding tool started the compromise, AI-assisted fake job interviews built trust, and attackers hijacked Binance's own internal AI tool to reach the wallet infrastructure team. [Reuters](https://www.reuters.com/world/binance-says-hackers-used-fake-job-interview-compromise-computer-before-63-2026-11-03/)
 
-- **South Korean banks:** The October 2026 breaches across 16 financial firms (~100,000 customer records) show traces of ARTEX, a free open-source AI penetration-testing agent (built on DeepSeek) that autonomously finds and exploits vulnerabilities — with CrowdStrike assessing a financially motivated Chinese-speaking actor behind it. [fdd](https://www.fdd.org/analysis/ai-assisted-bank-hacks-expose-a-blind-spot-in-south-koreas-cyber-defenses/)
+- **South Korean banks:** The October 2026 breaches across 16 financial firms (~100,000 customer records) show traces of ARTEX, a free open-source AI penetration-testing agent that autonomously finds and exploits vulnerabilities. [FDD](https://www.fdd.org/analysis/ai-assisted-bank-hacks-expose-a-blind-spot-in-south-koreas-cyber-defenses/)
 
 
 ---
@@ -311,15 +313,33 @@ https://arxiv.org/abs/2607.04655
 
 ## Constructed Natural Languages for Code Review
 
-*GFLean: An Autoformalisation Framework for Lean via GF*
+If we're going to have a lot of human review of formal statements and expressions then improving quality, reducing barriers to entry, and reduing cost will have signifcant value.  Using a constructed langage, which is often English but can be any/all that a reader prefers, a formal language appears in a natural form as they might use when stating the plain meaning of the formal expression.  That will improve accuracy for many humans and perhaps even some LLMs.
+
+*GFLean: An Autoformalisation Framework for Lean via [GF](https://www.grammaticalframework.org/)*
 https://arxiv.org/abs/2404.01234
+
+```
+Ex. Assume x is an integer, y is an integer and z is an integer. Assume x is even,
+y is even and z is not even or x is even, y is not even and z is even or x is not
+even, y is even and z is even. Then 3 * x + 5 * y + 7 * z is odd.
+
+example (x : Z) (y : Z) (z : Z) (h158 : ((even x ∧ (even y ∧ (¬ even z))) ∨ ((even x ∧ ((¬
+even y) ∧ even z)) ∨ ((¬ even x) ∧ (even y ∧ even z))))) : odd (((3 * x) + (5 * y)) + (7 *
+z)) := sorry
+```
 
 https://github.com/pkshashank/GFLeanTransfer
 https://pkshashank.github.io/
 
 https://github.com/medovina/natural_lean
 
+*Human-in-the-Loop: Legal Knowledge Formalization in Attempto Controlled English* (2025)
+https://ieeexplore.ieee.org/document/11011971
 
+*Controlled Language Increases Comprehension of Law for People* (2025)
+https://dl.acm.org/doi/10.1145/3711128
+
+*The Pedantic Javadoc Corpus: Comments and Code as Bitext* https://aclanthology.org/2013.bitext-1.6/ [poster](https://drive.google.com/file/d/0B6PL2BdpA2NFeE1KcXVMWE5qaWc/view?usp=sharing&resourcekey=0-0HaoIG-P5nmrV0rOZ5KxVg)
 
 ---
 
@@ -401,10 +421,10 @@ https://www.cl.cam.ac.uk/~mom22/jitawa/
 
 ## WASM for Trusted Compute (PoCs)
 
-### Hosting Milawa on WASM using ECL
+### Milawa runtime on WASM using ECL
 https://github.com/jimwhite/acl2/tree/milawa-ecl
 
-### Hosting ACL2 on WASM using ECL
+### ACL2 runtime on WASM using ECL
 https://github.com/jimwhite/acl2/tree/ecl
 
 Run (with a currently small set of books) in the browser (Firefox)
@@ -473,7 +493,7 @@ https://github.com/fabio-rovai/open-ontologies
 
 # Thank You
 
-https://wiki3-ai.github.io/verified-agent/acl2-trustworthy-ai/slides.html
+https://wiki3-ai.github.io/verified-agent/acl2-trustworthy-ai/slides.html [PDF](slides.pdf)
 
 ![https://wiki3-ai.github.io/verified-agent/acl2-trustworthy-ai/slides.html](qr_code_big.png)
 
